@@ -116,51 +116,6 @@ const toTripForm = (trip: Trip): TripForm => ({
   summary: trip.summary,
 })
 
-const sampleTrips = (): Trip[] => [
-  {
-    id: createId(),
-    title: '上海周末散心',
-    departure: '杭州',
-    destination: '上海',
-    startDate: '2026-04-18',
-    endDate: '2026-04-19',
-    cover: '城市夜景',
-    summary: '两天一夜，轻松吃逛，看夜景，适合周末短途放松。',
-    status: 'planning',
-    createdAt: new Date().toISOString(),
-    days: [
-      {
-        id: createId(),
-        date: '2026-04-18',
-        cities: ['上海'],
-        note: '上午出发，晚上看外滩夜景。',
-        items: [
-          {
-            id: createId(),
-            title: '乘高铁前往虹桥',
-            startTime: '08:30',
-            endTime: '09:45',
-            from: '杭州东站',
-            to: '上海虹桥站',
-            transportMode: 'train',
-            actualCost: '',
-            category: 'transport',
-            notes: '提前半小时到站更从容。',
-            progress: 'todo',
-          },
-        ],
-      },
-      {
-        id: createId(),
-        date: '2026-04-19',
-        cities: ['上海'],
-        note: '白天自由活动，晚上返程。',
-        items: [],
-      },
-    ],
-  },
-]
-
 function App() {
   const [trips, setTrips] = useState<Trip[]>(() => loadTrips())
   const [selectedTripId, setSelectedTripId] = useState(() => {
@@ -918,14 +873,37 @@ function JournalView({
 
 function loadTrips() {
   const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) return sampleTrips()
+  if (!raw) return []
   try {
     const parsed = JSON.parse(raw) as Trip[]
     const normalized = normalizeTrips(parsed)
-    return normalized.length > 0 ? normalized : sampleTrips()
+    return normalized.filter((trip) => !isBuiltInSampleTrip(trip))
   } catch {
-    return sampleTrips()
+    return []
   }
+}
+
+function isBuiltInSampleTrip(trip: Trip) {
+  return (
+    trip.title === '上海周末散心' &&
+    trip.departure === '杭州' &&
+    trip.destination === '上海' &&
+    trip.startDate === '2026-04-18' &&
+    trip.endDate === '2026-04-19' &&
+    trip.cover === '城市夜景' &&
+    trip.summary === '两天一夜，轻松吃逛，看夜景，适合周末短途放松。' &&
+    trip.status === 'planning' &&
+    trip.days.length === 2 &&
+    trip.days[0]?.date === '2026-04-18' &&
+    trip.days[0]?.cities.join('|') === '上海' &&
+    trip.days[0]?.note === '上午出发，晚上看外滩夜景。' &&
+    trip.days[0]?.items.length === 1 &&
+    trip.days[0]?.items[0]?.title === '乘高铁前往虹桥' &&
+    trip.days[1]?.date === '2026-04-19' &&
+    trip.days[1]?.cities.join('|') === '上海' &&
+    trip.days[1]?.note === '白天自由活动，晚上返程。' &&
+    trip.days[1]?.items.length === 0
+  )
 }
 
 function buildTripDays(startDate: string, endDate: string, existingDays: TripDay[] = []) {
