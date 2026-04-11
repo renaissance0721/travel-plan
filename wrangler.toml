@@ -1,0 +1,9 @@
+﻿name = "travel-planner-journal"
+compatibility_date = "2026-04-11"
+pages_build_output_dir = "./dist"
+
+# Add a D1 binding later when you move persistence from localStorage to Cloudflare.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "travel-planner"
+# database_id = "replace-with-real-id"
