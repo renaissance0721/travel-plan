@@ -1,4 +1,4 @@
-﻿CREATE TABLE trips (
+CREATE TABLE IF NOT EXISTS trips (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   departure TEXT NOT NULL,
@@ -12,7 +12,7 @@
   completed_at TEXT
 );
 
-CREATE TABLE trip_days (
+CREATE TABLE IF NOT EXISTS trip_days (
   id TEXT PRIMARY KEY,
   trip_id TEXT NOT NULL,
   trip_date TEXT NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE trip_days (
   FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE
 );
 
-CREATE TABLE trip_items (
+CREATE TABLE IF NOT EXISTS trip_items (
   id TEXT PRIMARY KEY,
   day_id TEXT NOT NULL,
   title TEXT NOT NULL,
@@ -37,4 +37,10 @@ CREATE TABLE trip_items (
   progress TEXT NOT NULL DEFAULT 'todo',
   sort_order INTEGER NOT NULL,
   FOREIGN KEY (day_id) REFERENCES trip_days(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS shared_trip_state (
+  id TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );

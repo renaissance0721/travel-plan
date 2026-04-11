@@ -1,11 +1,13 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useRef } from 'react'
 import './App.css'
 
 type TripStatus = 'planning' | 'archived'
 type ItemCategory = 'transport' | 'sightseeing' | 'food' | 'hotel' | 'shopping' | 'other'
 type TransportMode = 'walk' | 'subway' | 'bus' | 'taxi' | 'train' | 'flight' | 'car' | 'other'
 type ItemProgress = 'todo' | 'done'
+type SyncState = 'loading' | 'saving' | 'saved' | 'error'
 
 type TripItem = {
   id: string
@@ -57,6 +59,8 @@ type TripForm = {
 type ItemDraft = Omit<TripItem, 'id'>
 
 const STORAGE_KEY = 'travel-planner-journal-v1'
+const CLOUD_SYNC_ENDPOINT = '/api/trips'
+const CLOUD_SAVE_DELAY_MS = 900
 
 const CATEGORY_LABELS: Record<ItemCategory, string> = {
   transport: '交通',
@@ -117,31 +121,20 @@ const toTripForm = (trip: Trip): TripForm => ({
 })
 
 function App() {
-  const [trips, setTrips] = useState<Trip[]>(() => loadTrips())
-  const [selectedTripId, setSelectedTripId] = useState(() => {
-    const initialTrips = loadTrips()
-    return (initialTrips.find((trip) => trip.status === 'planning') ?? initialTrips[0])?.id ?? ''
-  })
-  const [editingTripId, setEditingTripId] = useState<string | null>(() => {
-    const initialTrips = loadTrips()
-    return (initialTrips.find((trip) => trip.status === 'planning') ?? initialTrips[0])?.id ?? null
-  })
+  const [trips, setTrips] = useState<Trip[]>([])
+  const [selectedTripId, setSelectedTripId] = useState('')
+  const [editingTripId, setEditingTripId] = useState<string | null>(null)
   const [isCreatingTrip, setIsCreatingTrip] = useState(false)
-  const [editingDayId, setEditingDayId] = useState<string | null>(() => {
-    const initialTrips = loadTrips()
-    return (initialTrips.find((trip) => trip.status === 'planning') ?? initialTrips[0])?.days[0]?.id ?? null
-  })
-  const [tripForm, setTripForm] = useState<TripForm>(() => {
-    const initialTrips = loadTrips()
-    const initialTrip = initialTrips.find((trip) => trip.status === 'planning') ?? initialTrips[0]
-    return initialTrip ? toTripForm(initialTrip) : emptyTripForm()
-  })
+  const [editingDayId, setEditingDayId] = useState<string | null>(null)
+  const [tripForm, setTripForm] = useState<TripForm>(emptyTripForm())
   const [itemDrafts, setItemDrafts] = useState<Record<string, ItemDraft>>({})
   const [activeView, setActiveView] = useState<'planner' | 'journal'>('planner')
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trips))
-  }, [trips])
+  const [syncState, setSyncState] = useState<SyncState>('loading')
+  const [syncMessage, setSyncMessage] = useState('正在读取云端数据...')
+  const [isLoadingRemote, setIsLoadingRemote] = useState(true)
+  const lastSyncedPayloadRef = useRef<string | null>(null)
+  const hasHydratedRef = useRef(false)
+  const saveTimerRef = useRef<number | null>(null)
 
   const planningTrips = useMemo(() => trips.filter((trip) => trip.status === 'planning'), [trips])
   const archivedTrips = useMemo(() => trips.filter((trip) => trip.status === 'archived'), [trips])
@@ -156,6 +149,132 @@ function App() {
   }, [editingDayId, selectedTrip])
   const selectedDayDraft = selectedDay ? itemDrafts[selectedDay.id] ?? emptyItemDraft() : null
   const stats = useMemo(() => computeTripStats(selectedTrip), [selectedTrip])
+
+  useEffect(() => {
+    let isCancelled = false
+    const cachedTrips = loadTripsFromCache()
+
+    if (cachedTrips.length > 0) {
+      applyCloudSnapshot(cachedTrips)
+      setSyncMessage('正在连接云端，先显示当前设备里的数据...')
+    }
+
+    async function hydrateTrips() {
+      try {
+        const remoteTrips = await fetchTripsFromCloud()
+        if (isCancelled) return
+
+        if (remoteTrips.length === 0 && cachedTrips.length > 0) {
+          await saveTripsToCloud(cachedTrips)
+          if (isCancelled) return
+
+          applyCloudSnapshot(cachedTrips)
+          lastSyncedPayloadRef.current = serializeTrips(cachedTrips)
+          setSyncState('saved')
+          setSyncMessage('已把当前设备里的数据迁移到云端。')
+        } else {
+          applyCloudSnapshot(remoteTrips)
+          lastSyncedPayloadRef.current = serializeTrips(remoteTrips)
+          setSyncState('saved')
+          setSyncMessage(
+            remoteTrips.length > 0
+              ? '已连接云端，所有设备访问都会看到同一份数据。'
+              : '云端还没有数据，现在创建的新旅行会直接保存到云端。',
+          )
+        }
+      } catch {
+        if (isCancelled) return
+
+        lastSyncedPayloadRef.current = serializeTrips(cachedTrips)
+        setSyncState('error')
+        setSyncMessage(
+          cachedTrips.length > 0
+            ? '云端读取失败，当前先继续使用这台设备上的缓存数据。'
+            : '云端读取失败，当前显示空白数据。',
+        )
+      } finally {
+        if (isCancelled) return
+        hasHydratedRef.current = true
+        setIsLoadingRemote(false)
+      }
+    }
+
+    void hydrateTrips()
+
+    return () => {
+      isCancelled = true
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trips))
+  }, [trips])
+
+  useEffect(() => {
+    if (!hasHydratedRef.current) return
+
+    const payload = serializeTrips(trips)
+    if (payload === lastSyncedPayloadRef.current) return
+
+    setSyncState('saving')
+    setSyncMessage('正在保存到云端...')
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+    }
+
+    saveTimerRef.current = window.setTimeout(() => {
+      void persistTrips(payload, trips)
+    }, CLOUD_SAVE_DELAY_MS)
+
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+    }
+  }, [trips])
+
+  function applyCloudSnapshot(nextTrips: Trip[]) {
+    const normalizedTrips = normalizeTrips(nextTrips).filter((trip) => !isBuiltInSampleTrip(trip))
+    const nextPlanningTrip = normalizedTrips.find((trip) => trip.status === 'planning') ?? null
+    const nextArchivedTrip = normalizedTrips.find((trip) => trip.status === 'archived') ?? null
+    const nextView = nextPlanningTrip ? 'planner' : nextArchivedTrip ? 'journal' : 'planner'
+    const nextSelectedTrip = nextView === 'planner' ? nextPlanningTrip : nextArchivedTrip
+
+    setTrips(normalizedTrips)
+    setActiveView(nextView)
+    setSelectedTripId(nextSelectedTrip?.id ?? '')
+    setEditingDayId(nextSelectedTrip?.days[0]?.id ?? null)
+    setItemDrafts({})
+    setIsCreatingTrip(false)
+
+    if (nextView === 'planner' && nextSelectedTrip) {
+      setTripForm(toTripForm(nextSelectedTrip))
+      setEditingTripId(nextSelectedTrip.id)
+    } else {
+      setTripForm(emptyTripForm())
+      setEditingTripId(null)
+    }
+  }
+
+  async function persistTrips(payload: string, nextTrips: Trip[]) {
+    try {
+      await saveTripsToCloud(nextTrips)
+      lastSyncedPayloadRef.current = payload
+      setSyncState('saved')
+      setSyncMessage('已保存到云端，手机刷新后也能看到最新数据。')
+    } catch {
+      setSyncState('error')
+      setSyncMessage('保存到云端失败，当前改动仍保留在本机缓存里。')
+    } finally {
+      saveTimerRef.current = null
+    }
+  }
 
   function setTripFormFromTrip(trip: Trip) {
     setTripForm(toTripForm(trip))
@@ -431,6 +550,7 @@ function App() {
             你可以记录日期、路线、交通方式、费用和备注。旅行结束后，将整趟行程归档保存，
             下次还可以基于旧旅行继续复制新计划。
           </p>
+          <p className={`sync-status sync-status-${syncState}`}>{syncMessage}</p>
           <div className="hero-actions">
             <button
               className="primary-button"
@@ -525,10 +645,15 @@ function App() {
               onCancel={cancelTripEditor}
               onSubmit={saveTrip}
             />
+          ) : isLoadingRemote ? (
+            <div className="empty-state">
+              <h2>正在读取云端数据</h2>
+              <p>请稍等一下，系统正在把公共旅行数据加载到当前设备。</p>
+            </div>
           ) : !selectedTrip ? (
             <div className="empty-state">
               <h2>先创建你的第一趟旅行</h2>
-              <p>当前版本会先保存在浏览器本地，刷新页面也不会丢。</p>
+              <p>当前版本会自动保存到云端，手机和电脑访问同一个网址都能看到。</p>
             </div>
           ) : (
             <>
@@ -871,7 +996,7 @@ function JournalView({
   )
 }
 
-function loadTrips() {
+function loadTripsFromCache() {
   const raw = window.localStorage.getItem(STORAGE_KEY)
   if (!raw) return []
   try {
@@ -881,6 +1006,37 @@ function loadTrips() {
   } catch {
     return []
   }
+}
+
+async function fetchTripsFromCloud() {
+  const response = await fetch(CLOUD_SYNC_ENDPOINT, {
+    headers: { accept: 'application/json' },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to load trips: ${response.status}`)
+  }
+
+  const payload = (await response.json()) as { trips?: Trip[] }
+  return normalizeTrips(Array.isArray(payload.trips) ? payload.trips : []).filter((trip) => !isBuiltInSampleTrip(trip))
+}
+
+async function saveTripsToCloud(trips: Trip[]) {
+  const response = await fetch(CLOUD_SYNC_ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ trips }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to save trips: ${response.status}`)
+  }
+}
+
+function serializeTrips(trips: Trip[]) {
+  return JSON.stringify(trips)
 }
 
 function isBuiltInSampleTrip(trip: Trip) {

@@ -55,6 +55,30 @@ button {
   max-width: 60ch;
 }
 
+.sync-status {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.sync-status-loading,
+.sync-status-saving {
+  background: rgba(218, 231, 242, 0.72);
+  color: #24404f;
+}
+
+.sync-status-saved {
+  background: rgba(229, 244, 233, 0.86);
+  color: #27513c;
+}
+
+.sync-status-error {
+  background: rgba(251, 232, 227, 0.92);
+  color: #8b3d28;
+}
+
 .hero-actions,
 .summary-actions,
 .item-actions,
