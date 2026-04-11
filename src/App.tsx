@@ -466,16 +466,6 @@ function App() {
     )
   }
 
-  function resetStorage() {
-    if (!window.confirm('确认清空当前浏览器中的旅行数据吗？')) return
-    const data = sampleTrips()
-    setTrips(data)
-    setSelectedTripId(data[0]?.id ?? '')
-    setEditingDayId(data[0]?.days[0]?.id ?? null)
-    setItemDrafts({})
-    resetTripEditor()
-  }
-
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -492,9 +482,6 @@ function App() {
               onClick={() => (activeView === 'planner' ? startCreatingTrip() : changeView('planner'))}
             >
               {activeView === 'planner' ? '新建旅行' : '前往计划中'}
-            </button>
-            <button className="ghost-button" onClick={resetStorage}>
-              重置示例数据
             </button>
           </div>
         </div>
