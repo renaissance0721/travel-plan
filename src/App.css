@@ -749,6 +749,12 @@ button:disabled {
   .mobile-workspace-bar {
     display: flex;
     justify-content: flex-start;
+    position: sticky;
+    top: 8px;
+    z-index: 20;
+    padding: 4px 0;
+    background: linear-gradient(180deg, rgba(244, 248, 251, 0.96), rgba(244, 248, 251, 0.82));
+    backdrop-filter: blur(8px);
   }
 
   .mobile-workspace-button {

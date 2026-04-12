@@ -420,7 +420,6 @@ function App() {
 
   function changeView(view: 'planner' | 'journal') {
     setActiveView(view)
-    setIsWorkspacePanelOpen(false)
     if (view === 'journal') {
       resetTripEditor()
     }
