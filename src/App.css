@@ -777,11 +777,6 @@ button:disabled {
     overflow-x: auto;
     overflow-y: hidden;
     padding: 2px 0 8px;
-    position: sticky;
-    top: 10px;
-    z-index: 5;
-    background: linear-gradient(180deg, rgba(244, 248, 251, 0.98), rgba(244, 248, 251, 0.82));
-    backdrop-filter: blur(10px);
     -webkit-overflow-scrolling: touch;
   }
 
@@ -872,7 +867,6 @@ button:disabled {
 
   .day-nav {
     grid-auto-columns: minmax(132px, 72vw);
-    top: 8px;
   }
 
   .day-nav button {
