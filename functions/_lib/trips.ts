@@ -225,6 +225,46 @@ export async function shareTripWithUser(env: Env, owner: AuthUser, tripId: strin
   return getAccessibleTrips(env, owner)
 }
 
+export async function removeTripShareForUser(env: Env, owner: AuthUser, tripId: string, email: string) {
+  const normalizedEmail = normalizeEmail(email)
+
+  const ownedTrip = await env.DB.prepare(
+    'SELECT owner_user_id FROM trip_documents WHERE id = ? AND owner_user_id = ? LIMIT 1',
+  )
+    .bind(tripId, owner.id)
+    .first<AccessRow>()
+
+  if (!ownedTrip) {
+    throw new Error('只有创建者可以管理这趟旅行的分享名单。')
+  }
+
+  const targetUser = await env.DB.prepare(
+    'SELECT id, email FROM users WHERE email = ? LIMIT 1',
+  )
+    .bind(normalizedEmail)
+    .first<UserRow>()
+
+  if (!targetUser) {
+    throw new Error('找不到这个账号邮箱，请确认对方已经注册。')
+  }
+
+  const existingShare = await env.DB.prepare(
+    'SELECT id FROM trip_shares WHERE trip_id = ? AND user_id = ? LIMIT 1',
+  )
+    .bind(tripId, targetUser.id)
+    .first<{ id: string }>()
+
+  if (!existingShare) {
+    throw new Error('这个账号当前不在分享名单中。')
+  }
+
+  await env.DB.prepare('DELETE FROM trip_shares WHERE trip_id = ? AND user_id = ?')
+    .bind(tripId, targetUser.id)
+    .run()
+
+  return getAccessibleTrips(env, owner)
+}
+
 async function toAccessibleTrip(env: Env, row: TripRow, userId: string) {
   try {
     const payload = JSON.parse(row.payload) as TripRecord

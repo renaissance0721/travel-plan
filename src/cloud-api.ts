@@ -66,6 +66,13 @@ export async function shareTripWithAccount(tripId: string, email: string) {
   })
 }
 
+export async function removeTripShareFromAccount(tripId: string, email: string) {
+  return requestJson<TripsResponse>(`/api/trips/${encodeURIComponent(tripId)}/share`, {
+    method: 'DELETE',
+    body: JSON.stringify({ email }),
+  })
+}
+
 async function requestJson<T>(url: string, init: RequestInit) {
   const response = await fetch(url, {
     credentials: 'include',

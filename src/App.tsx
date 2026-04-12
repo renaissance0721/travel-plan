@@ -6,6 +6,7 @@ import {
   fetchTrips,
   loginUser,
   logoutUser,
+  removeTripShareFromAccount,
   registerUser,
   shareTripWithAccount,
   syncTrips,
@@ -67,6 +68,7 @@ function App() {
   const [shareEmail, setShareEmail] = useState('')
   const [shareState, setShareState] = useState<SyncState>('idle')
   const [isWorkspacePanelOpen, setIsWorkspacePanelOpen] = useState(false)
+  const [shareBusyEmail, setShareBusyEmail] = useState<string | null>(null)
   const [shareMessage, setShareMessage] = useState('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
   const lastSyncedPayloadRef = useRef<string | null>(null)
   const hasHydratedRef = useRef(false)
@@ -179,12 +181,14 @@ function App() {
     if (!selectedTrip) {
       setShareEmail('')
       setShareState('idle')
+      setShareBusyEmail(null)
       setShareMessage('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
       return
     }
 
     setShareEmail('')
     setShareState('idle')
+    setShareBusyEmail(null)
     setShareMessage(
       selectedTrip.accessRole === 'owner'
         ? '把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。'
@@ -301,6 +305,7 @@ function App() {
     setIsCreatingTrip(false)
     setShareEmail('')
     setShareState('idle')
+    setShareBusyEmail(null)
     setIsWorkspacePanelOpen(false)
     setShareMessage('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
     setIsLoadingTrips(false)
@@ -569,6 +574,40 @@ function App() {
     } catch (error) {
       setShareState('error')
       setShareMessage(error instanceof Error ? error.message : '分享旅行失败。')
+    }
+  }
+
+  async function handleRemoveShare(email: string) {
+    if (!selectedTrip) return
+
+    if (selectedTrip.canShare === false) {
+      setShareState('error')
+      setShareMessage('只有创建者可以管理这趟旅行的分享名单。')
+      return
+    }
+
+    const confirmed = window.confirm(`确认停止与 ${email} 共享这趟旅行吗？`)
+    if (!confirmed) return
+
+    setShareState('saving')
+    setShareBusyEmail(email)
+    setShareMessage(`正在把 ${email} 从分享名单中移除...`)
+
+    try {
+      const response = await removeTripShareFromAccount(selectedTrip.id, email)
+      const normalized = normalizeTrips(response.trips)
+      applyTripsSnapshot(normalized, selectedTrip.id, activeView)
+      if (currentUser) {
+        saveTripsToCache(currentUser.email, normalized)
+      }
+      lastSyncedPayloadRef.current = serializeTripsForSync(normalized)
+      setShareState('saved')
+      setShareMessage(`${email} 已从分享名单中移除，对方账号之后将不再看到这趟旅行。`)
+    } catch (error) {
+      setShareState('error')
+      setShareMessage(error instanceof Error ? error.message : '移除分享账号失败。')
+    } finally {
+      setShareBusyEmail(null)
     }
   }
 
@@ -858,8 +897,10 @@ function App() {
                   shareEmail={shareEmail}
                   shareMessage={shareMessage}
                   shareState={shareState}
+                  shareBusyEmail={shareBusyEmail}
                   onShareEmailChange={setShareEmail}
                   onShare={handleShareTrip}
+                  onRemoveShare={handleRemoveShare}
                 />
               </>
             ) : (
@@ -910,8 +951,10 @@ function App() {
                 shareEmail={shareEmail}
                 shareMessage={shareMessage}
                 shareState={shareState}
+                shareBusyEmail={shareBusyEmail}
                 onShareEmailChange={setShareEmail}
                 onShare={handleShareTrip}
+                onRemoveShare={handleRemoveShare}
               />
 
               <div className="day-layout">

@@ -92,15 +92,19 @@ export function SharePanel({
   shareEmail,
   shareMessage,
   shareState,
+  shareBusyEmail,
   onShareEmailChange,
   onShare,
+  onRemoveShare,
 }: {
   trip: Trip
   shareEmail: string
   shareMessage: string
   shareState: SyncState
+  shareBusyEmail: string | null
   onShareEmailChange: (value: string) => void
   onShare: () => void
+  onRemoveShare: (email: string) => void
 }) {
   return (
     <section className="share-card">
@@ -119,7 +123,17 @@ export function SharePanel({
           {trip.sharedWith && trip.sharedWith.length > 0 ? (
             <div className="share-list">
               {trip.sharedWith.map((email) => (
-                <span key={email} className="badge">{email}</span>
+                <div key={email} className="share-member">
+                  <span className="badge">{email}</span>
+                  <button
+                    type="button"
+                    className="mini-button"
+                    onClick={() => onRemoveShare(email)}
+                    disabled={shareState === 'saving' && shareBusyEmail === email}
+                  >
+                    {shareState === 'saving' && shareBusyEmail === email ? '移除中...' : '移除'}
+                  </button>
+                </div>
               ))}
             </div>
           ) : (

@@ -136,12 +136,28 @@ button {
 }
 
 .account-chip-row,
-.share-list,
 .share-form {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+.share-list {
+  display: grid;
+  gap: 10px;
+}
+
+.share-member {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(244, 248, 251, 0.92);
+  border: 1px solid rgba(25, 35, 52, 0.08);
 }
 
 .account-chip {
@@ -363,6 +379,7 @@ label {
   display: grid;
   gap: 6px;
   align-content: start;
+  min-height: 92px;
 }
 
 .day-nav button strong {
@@ -375,6 +392,13 @@ label {
   display: block;
   line-height: 1.35;
   word-break: break-word;
+}
+
+.day-nav button span:last-child {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .trip-card-cover {
@@ -407,6 +431,11 @@ label {
   display: grid;
   gap: 10px;
   align-content: start;
+  grid-auto-rows: minmax(92px, auto);
+  max-height: calc(6 * 92px + 5 * 10px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
 }
 
 .day-detail,
@@ -1013,11 +1042,14 @@ button:disabled {
   }
 
   .day-nav {
+    grid-auto-rows: auto;
     grid-auto-flow: column;
     grid-auto-columns: minmax(142px, 58vw);
+    max-height: none;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 2px 0 8px;
+    padding-right: 0;
     -webkit-overflow-scrolling: touch;
   }
 
