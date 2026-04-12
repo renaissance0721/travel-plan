@@ -1,126 +1,58 @@
-﻿import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-
-type TripStatus = 'planning' | 'archived'
-type ItemCategory = 'transport' | 'sightseeing' | 'food' | 'hotel' | 'shopping' | 'other'
-type TransportMode = 'walk' | 'subway' | 'bus' | 'taxi' | 'train' | 'flight' | 'car' | 'other'
-type ItemProgress = 'todo' | 'done'
-type SyncState = 'loading' | 'saving' | 'saved' | 'error'
-
-type TripItem = {
-  id: string
-  title: string
-  startTime: string
-  endTime: string
-  from: string
-  to: string
-  transportMode: TransportMode
-  actualCost: string
-  category: ItemCategory
-  notes: string
-  progress: ItemProgress
-}
-
-type TripDay = {
-  id: string
-  date: string
-  cities: string[]
-  note: string
-  items: TripItem[]
-}
-
-type Trip = {
-  id: string
-  title: string
-  departure: string
-  destination: string
-  startDate: string
-  endDate: string
-  cover: string
-  summary: string
-  status: TripStatus
-  createdAt: string
-  completedAt?: string
-  days: TripDay[]
-}
-
-type TripForm = {
-  title: string
-  departure: string
-  destination: string
-  startDate: string
-  endDate: string
-  cover: string
-  summary: string
-}
-
-type ItemDraft = Omit<TripItem, 'id'>
-
-const STORAGE_KEY = 'travel-planner-journal-v1'
-const CLOUD_SYNC_ENDPOINT = '/api/trips'
-const CLOUD_SAVE_DELAY_MS = 900
-
-const CATEGORY_LABELS: Record<ItemCategory, string> = {
-  transport: '交通',
-  sightseeing: '景点',
-  food: '餐饮',
-  hotel: '住宿',
-  shopping: '购物',
-  other: '其他',
-}
-
-const TRANSPORT_LABELS: Record<TransportMode, string> = {
-  walk: '步行',
-  subway: '地铁',
-  bus: '公交',
-  taxi: '打车',
-  train: '高铁/火车',
-  flight: '飞机',
-  car: '自驾',
-  other: '其他',
-}
-
-const PROGRESS_LABELS: Record<ItemProgress, string> = {
-  todo: '待完成',
-  done: '已完成',
-}
-
-const emptyTripForm = (): TripForm => ({
-  title: '',
-  departure: '',
-  destination: '',
-  startDate: '',
-  endDate: '',
-  cover: '海岸公路',
-  summary: '',
-})
-
-const emptyItemDraft = (): ItemDraft => ({
-  title: '',
-  startTime: '',
-  endTime: '',
-  from: '',
-  to: '',
-  transportMode: 'train',
-  actualCost: '',
-  category: 'transport',
-  notes: '',
-  progress: 'todo',
-})
-
-const toTripForm = (trip: Trip): TripForm => ({
-  title: trip.title,
-  departure: trip.departure,
-  destination: trip.destination,
-  startDate: trip.startDate,
-  endDate: trip.endDate,
-  cover: trip.cover,
-  summary: trip.summary,
-})
+import {
+  deleteTripOnServer,
+  fetchCurrentUser,
+  fetchTrips,
+  loginUser,
+  logoutUser,
+  registerUser,
+  shareTripWithAccount,
+  syncTrips,
+} from './cloud-api'
+import { loadTripsFromCache, saveTripsToCache } from './trip-cache'
+import {
+  AuthScreen,
+  DayEditor,
+  JournalView,
+  Metric,
+  SharePanel,
+  SidebarTripEditor,
+  SyncBadge,
+  TripBasicsForm,
+} from './trip-components'
+import {
+  CLOUD_SAVE_DELAY_MS,
+  attachOwnedTripMeta,
+  buildTripDays,
+  computeTripStats,
+  createId,
+  emptyItemDraft,
+  emptyTripForm,
+  getCitySummary,
+  normalizeTrips,
+  stripTripPermissions,
+  toTripForm,
+  type AuthMode,
+  type AuthStatus,
+  type ItemDraft,
+  type SyncState,
+  type Trip,
+  type TripDay,
+  type TripForm,
+  type TripItem,
+  type User,
+} from './trip-model'
 
 function App() {
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading')
+  const [authMode, setAuthMode] = useState<AuthMode>('login')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authMessage, setAuthMessage] = useState('登录后即可同步你自己的旅行，并把单独的旅行分享给别的账号。')
+  const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+
   const [trips, setTrips] = useState<Trip[]>([])
   const [selectedTripId, setSelectedTripId] = useState('')
   const [editingTripId, setEditingTripId] = useState<string | null>(null)
@@ -129,9 +61,12 @@ function App() {
   const [tripForm, setTripForm] = useState<TripForm>(emptyTripForm())
   const [itemDrafts, setItemDrafts] = useState<Record<string, ItemDraft>>({})
   const [activeView, setActiveView] = useState<'planner' | 'journal'>('planner')
-  const [syncState, setSyncState] = useState<SyncState>('loading')
-  const [syncMessage, setSyncMessage] = useState('正在读取云端数据...')
-  const [isLoadingRemote, setIsLoadingRemote] = useState(true)
+  const [syncState, setSyncState] = useState<SyncState>('idle')
+  const [syncMessage, setSyncMessage] = useState('登录后可同步和共享旅行计划。')
+  const [isLoadingTrips, setIsLoadingTrips] = useState(false)
+  const [shareEmail, setShareEmail] = useState('')
+  const [shareState, setShareState] = useState<SyncState>('idle')
+  const [shareMessage, setShareMessage] = useState('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
   const lastSyncedPayloadRef = useRef<string | null>(null)
   const hasHydratedRef = useRef(false)
   const saveTimerRef = useRef<number | null>(null)
@@ -151,58 +86,38 @@ function App() {
   const stats = useMemo(() => computeTripStats(selectedTrip), [selectedTrip])
 
   useEffect(() => {
-    let isCancelled = false
-    const cachedTrips = loadTripsFromCache()
+    const loadState = { cancelled: false }
 
-    if (cachedTrips.length > 0) {
-      applyCloudSnapshot(cachedTrips)
-      setSyncMessage('正在连接云端，先显示当前设备里的数据...')
-    }
-
-    async function hydrateTrips() {
+    async function bootstrap() {
       try {
-        const remoteTrips = await fetchTripsFromCloud()
-        if (isCancelled) return
+        const user = await fetchCurrentUser()
+        if (loadState.cancelled) return
 
-        if (remoteTrips.length === 0 && cachedTrips.length > 0) {
-          await saveTripsToCloud(cachedTrips)
-          if (isCancelled) return
-
-          applyCloudSnapshot(cachedTrips)
-          lastSyncedPayloadRef.current = serializeTrips(cachedTrips)
-          setSyncState('saved')
-          setSyncMessage('已把当前设备里的数据迁移到云端。')
-        } else {
-          applyCloudSnapshot(remoteTrips)
-          lastSyncedPayloadRef.current = serializeTrips(remoteTrips)
-          setSyncState('saved')
-          setSyncMessage(
-            remoteTrips.length > 0
-              ? '已连接云端，所有设备访问都会看到同一份数据。'
-              : '云端还没有数据，现在创建的新旅行会直接保存到云端。',
-          )
+        if (!user) {
+          resetWorkspace()
+          setCurrentUser(null)
+          setAuthStatus('unauthenticated')
+          setSyncState('idle')
+          setSyncMessage('登录后可同步你自己的旅行，并把单独的旅行分享给别的账号。')
+          return
         }
-      } catch {
-        if (isCancelled) return
 
-        lastSyncedPayloadRef.current = serializeTrips(cachedTrips)
+        await startUserSession(user, () => loadState.cancelled)
+      } catch {
+        if (loadState.cancelled) return
+        resetWorkspace()
+        setCurrentUser(null)
+        setAuthStatus('unauthenticated')
+        setAuthMessage('登录状态校验失败，请重新登录。')
         setSyncState('error')
-        setSyncMessage(
-          cachedTrips.length > 0
-            ? '云端读取失败，当前先继续使用这台设备上的缓存数据。'
-            : '云端读取失败，当前显示空白数据。',
-        )
-      } finally {
-        if (isCancelled) return
-        hasHydratedRef.current = true
-        setIsLoadingRemote(false)
+        setSyncMessage('暂时无法校验登录状态。')
       }
     }
 
-    void hydrateTrips()
+    void bootstrap()
 
     return () => {
-      isCancelled = true
+      loadState.cancelled = true
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current)
         saveTimerRef.current = null
@@ -211,24 +126,28 @@ function App() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trips))
-  }, [trips])
+    if (!currentUser) return
+    saveTripsToCache(currentUser.email, trips)
+  }, [currentUser, trips])
 
   useEffect(() => {
-    if (!hasHydratedRef.current) return
+    if (authStatus !== 'authenticated' || !currentUser || !hasHydratedRef.current) return
 
-    const payload = serializeTrips(trips)
+    const payload = serializeTripsForSync(trips)
     if (payload === lastSyncedPayloadRef.current) return
 
     setSyncState('saving')
-    setSyncMessage('正在保存到云端...')
+    setSyncMessage('正在把你的旅行数据同步到云端...')
 
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current)
     }
 
+    const preferredTripId = selectedTripId
+    const preferredView = activeView
+
     saveTimerRef.current = window.setTimeout(() => {
-      void persistTrips(payload, trips)
+      void persistTrips(preferredTripId, preferredView)
     }, CLOUD_SAVE_DELAY_MS)
 
     return () => {
@@ -237,14 +156,99 @@ function App() {
         saveTimerRef.current = null
       }
     }
-  }, [trips])
+  }, [activeView, authStatus, currentUser, selectedTripId, trips])
 
-  function applyCloudSnapshot(nextTrips: Trip[]) {
-    const normalizedTrips = normalizeTrips(nextTrips).filter((trip) => !isBuiltInSampleTrip(trip))
-    const nextPlanningTrip = normalizedTrips.find((trip) => trip.status === 'planning') ?? null
-    const nextArchivedTrip = normalizedTrips.find((trip) => trip.status === 'archived') ?? null
-    const nextView = nextPlanningTrip ? 'planner' : nextArchivedTrip ? 'journal' : 'planner'
-    const nextSelectedTrip = nextView === 'planner' ? nextPlanningTrip : nextArchivedTrip
+  useEffect(() => {
+    if (!selectedTrip) {
+      setShareEmail('')
+      setShareState('idle')
+      setShareMessage('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
+      return
+    }
+
+    setShareEmail('')
+    setShareState('idle')
+    setShareMessage(
+      selectedTrip.accessRole === 'owner'
+        ? '把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。'
+        : `这趟旅行由 ${selectedTrip.ownerEmail || '其他账号'} 分享给你。`,
+    )
+  }, [selectedTrip?.id])
+
+  async function startUserSession(user: User, isCancelled: () => boolean = () => false) {
+    setCurrentUser(user)
+    setAuthStatus('authenticated')
+    setAuthPassword('')
+    setAuthMessage('')
+    setIsLoadingTrips(true)
+    setSyncState('loading')
+
+    const cachedTrips = loadTripsFromCache(user.email)
+    if (cachedTrips.length > 0) {
+      applyTripsSnapshot(cachedTrips)
+      setSyncMessage('正在连接云端，先显示当前设备里的缓存数据...')
+    } else {
+      setSyncMessage('正在读取账号里的旅行数据...')
+    }
+
+    try {
+      const remote = await fetchTrips()
+      if (isCancelled()) return
+
+      if (remote.trips.length === 0 && cachedTrips.length > 0) {
+        const migrated = await syncTrips(cachedTrips.map(stripTripPermissions))
+        if (isCancelled()) return
+
+        const normalized = normalizeTrips(migrated.trips)
+        applyTripsSnapshot(normalized)
+        saveTripsToCache(user.email, normalized)
+        lastSyncedPayloadRef.current = serializeTripsForSync(normalized)
+        setSyncState('saved')
+        setSyncMessage('已把当前设备里的旅行数据迁移到你的账号。')
+      } else {
+        const normalized = normalizeTrips(remote.trips)
+        applyTripsSnapshot(normalized)
+        saveTripsToCache(user.email, normalized)
+        lastSyncedPayloadRef.current = serializeTripsForSync(normalized)
+        setSyncState('saved')
+        setSyncMessage(
+          normalized.length > 0
+            ? '已连接账号云端，登录同一个账号就能继续编辑这些旅行。'
+            : '账号里还没有旅行，现在创建的新旅行会自动同步到云端。',
+        )
+      }
+    } catch {
+      if (isCancelled()) return
+      lastSyncedPayloadRef.current = serializeTripsForSync(cachedTrips)
+      setSyncState('error')
+      setSyncMessage(
+        cachedTrips.length > 0
+          ? '云端读取失败，当前先继续使用这台设备上的缓存数据。'
+          : '云端读取失败，当前账号下还没有可显示的数据。',
+      )
+    } finally {
+      if (isCancelled()) return
+      hasHydratedRef.current = true
+      setIsLoadingTrips(false)
+    }
+  }
+
+  function applyTripsSnapshot(nextTrips: Trip[], preferredTripId = selectedTripId, preferredView = activeView) {
+    const normalizedTrips = normalizeTrips(nextTrips)
+    const nextPlanningTrips = normalizedTrips.filter((trip) => trip.status === 'planning')
+    const nextArchivedTrips = normalizedTrips.filter((trip) => trip.status === 'archived')
+
+    let nextView = preferredView
+    if (nextView === 'planner' && nextPlanningTrips.length === 0 && nextArchivedTrips.length > 0) nextView = 'journal'
+    if (nextView === 'journal' && nextArchivedTrips.length === 0 && nextPlanningTrips.length > 0) nextView = 'planner'
+
+    const nextVisibleTrips = nextView === 'planner' ? nextPlanningTrips : nextArchivedTrips
+    const nextSelectedTrip =
+      nextVisibleTrips.find((trip) => trip.id === preferredTripId) ??
+      nextVisibleTrips[0] ??
+      nextPlanningTrips[0] ??
+      nextArchivedTrips[0] ??
+      null
 
     setTrips(normalizedTrips)
     setActiveView(nextView)
@@ -262,17 +266,83 @@ function App() {
     }
   }
 
-  async function persistTrips(payload: string, nextTrips: Trip[]) {
+  function resetWorkspace() {
+    setTrips([])
+    setSelectedTripId('')
+    setEditingTripId(null)
+    setEditingDayId(null)
+    setTripForm(emptyTripForm())
+    setItemDrafts({})
+    setActiveView('planner')
+    setIsCreatingTrip(false)
+    setShareEmail('')
+    setShareState('idle')
+    setShareMessage('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
+    setIsLoadingTrips(false)
+    hasHydratedRef.current = false
+    lastSyncedPayloadRef.current = null
+  }
+
+  async function persistTrips(preferredTripId = selectedTripId, preferredView = activeView) {
+    if (!currentUser) return
+
     try {
-      await saveTripsToCloud(nextTrips)
-      lastSyncedPayloadRef.current = payload
+      const response = await syncTrips(trips.map(stripTripPermissions))
+      const normalized = normalizeTrips(response.trips)
+      applyTripsSnapshot(normalized, preferredTripId, preferredView)
+      saveTripsToCache(currentUser.email, normalized)
+      lastSyncedPayloadRef.current = serializeTripsForSync(normalized)
       setSyncState('saved')
-      setSyncMessage('已保存到云端，手机刷新后也能看到最新数据。')
-    } catch {
+      setSyncMessage('已同步到云端，登录同一个账号的设备都会看到最新内容。')
+    } catch (error) {
       setSyncState('error')
-      setSyncMessage('保存到云端失败，当前改动仍保留在本机缓存里。')
+      setSyncMessage(error instanceof Error ? error.message : '同步到云端失败。')
     } finally {
       saveTimerRef.current = null
+    }
+  }
+
+  async function handleAuthSubmit() {
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthMessage('请先填写账号邮箱和密码。')
+      return
+    }
+
+    setIsAuthenticating(true)
+    setAuthMessage(authMode === 'login' ? '正在登录...' : '正在创建账号...')
+
+    try {
+      const response =
+        authMode === 'login'
+          ? await loginUser(authEmail, authPassword)
+          : await registerUser(authEmail, authPassword)
+
+      if (!response.user) {
+        throw new Error('账号登录状态建立失败，请重试。')
+      }
+
+      await startUserSession(response.user)
+    } catch (error) {
+      resetWorkspace()
+      setCurrentUser(null)
+      setAuthStatus('unauthenticated')
+      setAuthMessage(error instanceof Error ? error.message : '账号操作失败。')
+    } finally {
+      setIsAuthenticating(false)
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logoutUser()
+    } finally {
+      resetWorkspace()
+      setCurrentUser(null)
+      setAuthStatus('unauthenticated')
+      setAuthPassword('')
+      setAuthMessage('你已经退出登录了。')
+      setSyncState('idle')
+      setSyncMessage('登录后可同步你自己的旅行，并把单独的旅行分享给别的账号。')
     }
   }
 
@@ -323,18 +393,22 @@ function App() {
     }
 
     const nextTrips = view === 'planner' ? planningTrips : archivedTrips
-    const nextTrip =
-      nextTrips.find((trip) => trip.id === selectedTripId) ?? nextTrips[0] ?? null
+    const nextTrip = nextTrips.find((trip) => trip.id === selectedTripId) ?? nextTrips[0] ?? null
 
     setSelectedTripId(nextTrip?.id ?? '')
     setEditingDayId(nextTrip?.days[0]?.id ?? null)
     if (view === 'planner' && nextTrip) {
       setTripFormFromTrip(nextTrip)
       setIsCreatingTrip(false)
+    } else if (view === 'planner') {
+      setTripForm(emptyTripForm())
+      setEditingTripId(null)
     }
   }
 
   function saveTrip() {
+    if (!currentUser) return
+
     if (!tripForm.title || !tripForm.departure || !tripForm.destination || !tripForm.startDate || !tripForm.endDate) {
       window.alert('请先填写完整的旅行基础信息。')
       return
@@ -355,63 +429,114 @@ function App() {
       )
       setSelectedTripId(editingTripId)
       setIsCreatingTrip(false)
-    } else {
-      const newTrip: Trip = {
+      return
+    }
+
+    const newTrip = attachOwnedTripMeta(
+      {
         id: createId(),
         ...tripForm,
         status: 'planning',
         createdAt: new Date().toISOString(),
         days: buildTripDays(tripForm.startDate, tripForm.endDate),
-      }
-      setTrips((current) => [newTrip, ...current])
-      selectTrip(newTrip)
-      setActiveView('planner')
-      setTripFormFromTrip(newTrip)
-      setIsCreatingTrip(false)
-    }
+      },
+      currentUser.email,
+    )
+
+    setTrips((current) => [newTrip, ...current])
+    selectTrip(newTrip)
+    setActiveView('planner')
+    setTripFormFromTrip(newTrip)
+    setIsCreatingTrip(false)
   }
 
   function duplicateTrip(trip: Trip) {
-    const nextTrip: Trip = {
-      ...trip,
-      id: createId(),
-      title: `${trip.title} - 新计划`,
-      status: 'planning',
-      createdAt: new Date().toISOString(),
-      completedAt: undefined,
-      days: trip.days.map((day) => ({
-        ...day,
+    if (!currentUser) return
+
+    const nextTrip = attachOwnedTripMeta(
+      {
+        ...stripTripPermissions(trip),
         id: createId(),
-        cities: [...day.cities],
-        items: day.items.map((item) => ({ ...item, id: createId(), actualCost: '', progress: 'todo' })),
-      })),
-    }
+        title: `${trip.title} - 新计划`,
+        status: 'planning',
+        createdAt: new Date().toISOString(),
+        completedAt: undefined,
+        days: trip.days.map((day) => ({
+          ...day,
+          id: createId(),
+          cities: [...day.cities],
+          items: day.items.map((item) => ({ ...item, id: createId(), actualCost: '', progress: 'todo' })),
+        })),
+      },
+      currentUser.email,
+    )
 
     setTrips((current) => [nextTrip, ...current])
     setActiveView('planner')
     selectTrip(nextTrip)
   }
 
-  function deleteTrip(tripId: string) {
+  async function deleteTrip(tripId: string) {
     const targetTrip = trips.find((trip) => trip.id === tripId)
     if (!targetTrip) return
+
+    if (targetTrip.canDelete === false) {
+      window.alert('只有创建者可以删除这趟旅行。')
+      return
+    }
 
     const confirmed = window.confirm(
       `确认删除「${targetTrip.title}」吗？\n\n删除后，这趟旅行的计划、日程事项和归档内容都将无法恢复。`,
     )
     if (!confirmed) return
 
-    const nextVisibleTrips = visibleTrips.filter((trip) => trip.id !== tripId)
-    const nextTrip = nextVisibleTrips[0] ?? null
+    try {
+      const response = await deleteTripOnServer(tripId)
+      const normalized = normalizeTrips(response.trips)
+      applyTripsSnapshot(normalized, selectedTripId === tripId ? '' : selectedTripId, activeView)
+      if (currentUser) {
+        saveTripsToCache(currentUser.email, normalized)
+      }
+      lastSyncedPayloadRef.current = serializeTripsForSync(normalized)
+      setSyncState('saved')
+      setSyncMessage('旅行已从你的账号空间中删除。')
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '删除旅行失败。')
+    }
+  }
 
-    setTrips((current) => current.filter((trip) => trip.id !== tripId))
-    setSelectedTripId(nextTrip?.id ?? '')
-    setEditingDayId(nextTrip?.days[0]?.id ?? null)
+  async function handleShareTrip() {
+    if (!selectedTrip) return
 
-    if (editingTripId === tripId) {
-      resetTripEditor()
-    } else if (nextTrip && activeView === 'planner') {
-      setTripFormFromTrip(nextTrip)
+    if (selectedTrip.canShare === false) {
+      setShareState('error')
+      setShareMessage('只有创建者可以继续分享这趟旅行。')
+      return
+    }
+
+    if (!shareEmail.trim()) {
+      setShareState('error')
+      setShareMessage('请输入要分享给对方的账号邮箱。')
+      return
+    }
+
+    setShareState('saving')
+    setShareMessage('正在分享这趟旅行...')
+
+    try {
+      const response = await shareTripWithAccount(selectedTrip.id, shareEmail)
+      const normalized = normalizeTrips(response.trips)
+      applyTripsSnapshot(normalized, selectedTrip.id, activeView)
+      if (currentUser) {
+        saveTripsToCache(currentUser.email, normalized)
+      }
+      lastSyncedPayloadRef.current = serializeTripsForSync(normalized)
+      setShareEmail('')
+      setShareState('saved')
+      setShareMessage('分享成功，对方登录自己的账号后就能看到这趟旅行。')
+    } catch (error) {
+      setShareState('error')
+      setShareMessage(error instanceof Error ? error.message : '分享旅行失败。')
     }
   }
 
@@ -420,7 +545,7 @@ function App() {
     if (!targetTrip) return
 
     const confirmed = window.confirm(
-      `确认将「${targetTrip.title}」归档为旅行日记吗？\n\n归档后，这趟旅行会从“计划中”移动到“已归档”，你可以继续查看并复制成新计划。`,
+      `确认将「${targetTrip.title}」归档为旅行日记吗？\n\n归档后，这趟旅行会从“计划中”移动到“已归档”，所有共享成员也会看到相同状态。`,
     )
     if (!confirmed) return
 
@@ -540,17 +665,47 @@ function App() {
     )
   }
 
+  if (authStatus !== 'authenticated') {
+    if (authStatus === 'loading') {
+      return (
+        <main className="auth-shell">
+          <section className="auth-card">
+            <span className="eyebrow">账号同步与共享旅行</span>
+            <h1>你的旅行手账</h1>
+            <p className="auth-copy">正在检查登录状态，请稍等一下。</p>
+          </section>
+        </main>
+      )
+    }
+
+    return (
+      <AuthScreen
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        isBusy={isAuthenticating}
+        message={authMessage}
+        onModeChange={setAuthMode}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onSubmit={handleAuthSubmit}
+      />
+    )
+  }
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
         <div className="hero-copy">
-          <span className="eyebrow">旅行计划与旅行日记</span>
-          <h1>旅行手账</h1>
+          <span className="eyebrow">登录同步与共享旅行</span>
+          <h1>你的旅行手账</h1>
           <p className="hero-text">
-            你可以记录日期、路线、交通方式、费用和备注。旅行结束后，将整趟行程归档保存，
-            下次还可以基于旧旅行继续复制新计划。
+            你的旅行计划会绑定到当前账号。你可以把单独一趟旅行分享给别人的账号邮箱，一起编辑同一份计划。
           </p>
-          <p className={`sync-status sync-status-${syncState}`}>{syncMessage}</p>
+          <div className="account-chip-row">
+            <span className="account-chip">当前账号：{currentUser?.email}</span>
+          </div>
+          <SyncBadge syncState={syncState} syncMessage={syncMessage} />
           <div className="hero-actions">
             <button
               className="primary-button"
@@ -558,11 +713,12 @@ function App() {
             >
               {activeView === 'planner' ? '新建旅行' : '前往计划中'}
             </button>
+            <button className="ghost-button" onClick={handleLogout}>退出登录</button>
           </div>
         </div>
         <div className="hero-card">
+          <Metric label="我可访问的旅行" value={trips.length} />
           <Metric label="计划中的旅行" value={planningTrips.length} />
-          <Metric label="已归档旅行" value={archivedTrips.length} />
           <Metric
             label="总事项数"
             value={trips.reduce((sum, trip) => sum + trip.days.reduce((acc, day) => acc + day.items.length, 0), 0)}
@@ -575,7 +731,7 @@ function App() {
           <div className="panel-header">
             <div>
               <h2>旅行工作台</h2>
-              <p>左侧管理旅行，右侧编辑每天的行程事项。</p>
+              <p>左侧管理你可访问的旅行，右侧编辑每天的行程事项。</p>
             </div>
           </div>
 
@@ -599,6 +755,7 @@ function App() {
                 <strong>{trip.title}</strong>
                 <span>{trip.departure} 到 {trip.destination}</span>
                 <span>{trip.startDate} 到 {trip.endDate}</span>
+                <span>{trip.accessRole === 'shared' ? `共享自 ${trip.ownerEmail || '其他账号'}` : '我创建的旅行'}</span>
               </button>
             ))}
           </div>
@@ -613,15 +770,15 @@ function App() {
               />
             ) : (
               <div className="sidebar-note">
-                <h3>计划中的旅行</h3>
-                <p>先新建一趟旅行，创建后会自动出现在列表里，并继续进入行程编辑。</p>
+                <h3>开始创建你的第一趟旅行</h3>
+                <p>创建后它会自动绑定到当前账号，你也可以再把它分享给别人一起编辑。</p>
                 <button className="primary-button" onClick={startCreatingTrip}>新建旅行</button>
               </div>
             )
           ) : (
             <div className="sidebar-note">
               <h3>归档旅行</h3>
-              <p>这里主要用于回看历史日记。如果想继续下一次旅行，可以打开右侧归档内容并点击“复制成新计划”。</p>
+              <p>这里会展示你自己创建的归档旅行，以及别人分享给你的归档旅行。</p>
             </div>
           )}
         </aside>
@@ -629,7 +786,17 @@ function App() {
         <section className="panel main-panel">
           {activeView === 'journal' ? (
             selectedTrip ? (
-              <JournalView trip={selectedTrip} onDuplicate={duplicateTrip} onDelete={deleteTrip} />
+              <>
+                <JournalView trip={selectedTrip} onDuplicate={duplicateTrip} onDelete={deleteTrip} />
+                <SharePanel
+                  trip={selectedTrip}
+                  shareEmail={shareEmail}
+                  shareMessage={shareMessage}
+                  shareState={shareState}
+                  onShareEmailChange={setShareEmail}
+                  onShare={handleShareTrip}
+                />
+              </>
             ) : (
               <div className="empty-state">
                 <h2>还没有已归档旅行</h2>
@@ -645,15 +812,15 @@ function App() {
               onCancel={cancelTripEditor}
               onSubmit={saveTrip}
             />
-          ) : isLoadingRemote ? (
+          ) : isLoadingTrips ? (
             <div className="empty-state">
-              <h2>正在读取云端数据</h2>
-              <p>请稍等一下，系统正在把公共旅行数据加载到当前设备。</p>
+              <h2>正在读取旅行数据</h2>
+              <p>请稍等一下，系统正在把当前账号可以访问的旅行加载出来。</p>
             </div>
           ) : !selectedTrip ? (
             <div className="empty-state">
               <h2>先创建你的第一趟旅行</h2>
-              <p>当前版本会自动保存到云端，手机和电脑访问同一个网址都能看到。</p>
+              <p>创建后会自动同步到当前账号，你也可以把它分享给别人的账号邮箱。</p>
             </div>
           ) : (
             <>
@@ -672,6 +839,15 @@ function App() {
                   </div>
                 </div>
               </header>
+
+              <SharePanel
+                trip={selectedTrip}
+                shareEmail={shareEmail}
+                shareMessage={shareMessage}
+                shareState={shareState}
+                onShareEmailChange={setShareEmail}
+                onShare={handleShareTrip}
+              />
 
               <div className="day-layout">
                 <aside className="day-nav">
@@ -703,8 +879,8 @@ function App() {
                 <button className="ghost-button" onClick={() => archiveTrip(selectedTrip.id)}>
                   归档为旅行日记
                 </button>
-                <button className="danger-button" onClick={() => deleteTrip(selectedTrip.id)}>
-                  删除这趟旅行
+                <button className="danger-button" onClick={() => deleteTrip(selectedTrip.id)} disabled={selectedTrip.canDelete === false}>
+                  {selectedTrip.canDelete === false ? '仅创建者可删除' : '删除这趟旅行'}
                 </button>
               </div>
             </>
@@ -714,420 +890,9 @@ function App() {
     </main>
   )
 }
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
 
-function SidebarTripEditor({
-  tripForm,
-  onCreate,
-  onChange,
-  onSave,
-}: {
-  tripForm: TripForm
-  onCreate: () => void
-  onChange: <K extends keyof TripForm>(key: K, value: TripForm[K]) => void
-  onSave: () => void
-}) {
-  return (
-    <section className="sidebar-trip-info">
-      <div className="section-title">
-        <h3>旅行基础信息</h3>
-        <span className="badge">{tripForm.cover || '未填写主题'}</span>
-      </div>
-      <label>旅行名称<input value={tripForm.title} onChange={(event) => onChange('title', event.target.value)} placeholder="例如：京都红叶五日" /></label>
-      <div className="two-column">
-        <label>出发地<input value={tripForm.departure} onChange={(event) => onChange('departure', event.target.value)} placeholder="上海" /></label>
-        <label>目的地<input value={tripForm.destination} onChange={(event) => onChange('destination', event.target.value)} placeholder="东京" /></label>
-      </div>
-      <div className="two-column">
-        <label>开始日期<input type="date" value={tripForm.startDate} onChange={(event) => onChange('startDate', event.target.value)} /></label>
-        <label>结束日期<input type="date" value={tripForm.endDate} onChange={(event) => onChange('endDate', event.target.value)} /></label>
-      </div>
-      <label>封面主题<input value={tripForm.cover} onChange={(event) => onChange('cover', event.target.value)} placeholder="海岸、雪山、古城" /></label>
-      <label>旅行说明<textarea rows={3} value={tripForm.summary} onChange={(event) => onChange('summary', event.target.value)} placeholder="这趟旅行主要想玩什么？" /></label>
-      <div className="sidebar-trip-actions">
-        <button className="ghost-button" onClick={onSave}>保存基础信息</button>
-        <button className="primary-button" onClick={onCreate}>新建旅行</button>
-      </div>
-    </section>
-  )
-}
-
-function TripBasicsForm({
-  title,
-  actionLabel,
-  tripForm,
-  onChange,
-  onCancel,
-  onSubmit,
-}: {
-  title: string
-  actionLabel: string
-  tripForm: TripForm
-  onChange: <K extends keyof TripForm>(key: K, value: TripForm[K]) => void
-  onCancel: () => void
-  onSubmit: () => void
-}) {
-  return (
-    <section className="trip-basics-card trip-form">
-      <div className="section-title">
-        <h3>{title}</h3>
-        <button className="mini-button" onClick={onCancel}>取消</button>
-      </div>
-      <label>旅行名称<input value={tripForm.title} onChange={(event) => onChange('title', event.target.value)} placeholder="例如：京都红叶五日" /></label>
-      <div className="two-column">
-        <label>出发地<input value={tripForm.departure} onChange={(event) => onChange('departure', event.target.value)} placeholder="上海" /></label>
-        <label>目的地<input value={tripForm.destination} onChange={(event) => onChange('destination', event.target.value)} placeholder="东京" /></label>
-      </div>
-      <div className="two-column">
-        <label>开始日期<input type="date" value={tripForm.startDate} onChange={(event) => onChange('startDate', event.target.value)} /></label>
-        <label>结束日期<input type="date" value={tripForm.endDate} onChange={(event) => onChange('endDate', event.target.value)} /></label>
-      </div>
-      <label>封面主题<input value={tripForm.cover} onChange={(event) => onChange('cover', event.target.value)} placeholder="海岸、雪山、古城" /></label>
-      <label>旅行说明<textarea rows={3} value={tripForm.summary} onChange={(event) => onChange('summary', event.target.value)} placeholder="这趟旅行主要想玩什么？" /></label>
-      <button className="primary-button" onClick={onSubmit}>{actionLabel}</button>
-    </section>
-  )
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label>{label}{children}</label>
-}
-
-function DayEditor({
-  day,
-  dayIndex,
-  draft,
-  onDayChange,
-  onDraftChange,
-  onAddItem,
-  onUpdateItem,
-  onRemoveItem,
-  onMoveItem,
-}: {
-  day: TripDay
-  dayIndex: number
-  draft: ItemDraft
-  onDayChange: (dayId: string, patch: Partial<TripDay>) => void
-  onDraftChange: <K extends keyof ItemDraft>(dayId: string, key: K, value: ItemDraft[K]) => void
-  onAddItem: (dayId: string) => void
-  onUpdateItem: (dayId: string, itemId: string, patch: Partial<TripItem>) => void
-  onRemoveItem: (dayId: string, itemId: string) => void
-  onMoveItem: (dayId: string, itemId: string, direction: 'up' | 'down') => void
-}) {
-  return (
-      <div className="day-detail">
-      <div className="section-title">
-        <h3>{`${formatDate(day.date)} · Day ${dayIndex}`}</h3>
-        <span className="badge">{day.items.length} 条事项</span>
-      </div>
-
-      <div className="day-meta">
-        <div className="city-editor">
-          <label>当天城市</label>
-          <div className="city-list">
-            {day.cities.map((city, index) => (
-              <div key={`${day.id}-city-${index}`} className="city-row">
-                <input
-                  value={city}
-                  onChange={(event) => {
-                    const nextCities = [...day.cities]
-                    nextCities[index] = event.target.value
-                    onDayChange(day.id, { cities: nextCities })
-                  }}
-                  placeholder={index === 0 ? '东京' : '继续添加城市'}
-                />
-                {day.cities.length > 1 ? (
-                  <button
-                    type="button"
-                    className="mini-button"
-                    onClick={() =>
-                      onDayChange(day.id, {
-                        cities: day.cities.filter((_, cityIndex) => cityIndex !== index),
-                      })
-                    }
-                  >
-                    删除
-                  </button>
-                ) : null}
-              </div>
-            ))}
-            <button
-              type="button"
-              className="mini-button add-city-button"
-              onClick={() => onDayChange(day.id, { cities: [...day.cities, ''] })}
-            >
-              添加城市
-            </button>
-          </div>
-        </div>
-        <label>当天备注<textarea rows={2} value={day.note} onChange={(event) => onDayChange(day.id, { note: event.target.value })} placeholder="写下今天的重点安排。" /></label>
-      </div>
-
-      <div className="editor-card">
-        <div className="section-title">
-          <h3>新增事项</h3>
-          <p>每一件事都可以单独修改、排序和删除。</p>
-        </div>
-        <label>事项标题<input value={draft.title} onChange={(event) => onDraftChange(day.id, 'title', event.target.value)} placeholder="例如：从酒店前往清水寺" /></label>
-        <div className="three-column">
-          <label>开始时间<input type="time" value={draft.startTime} onChange={(event) => onDraftChange(day.id, 'startTime', event.target.value)} /></label>
-          <label>结束时间<input type="time" value={draft.endTime} onChange={(event) => onDraftChange(day.id, 'endTime', event.target.value)} /></label>
-          <label>事项类型<select value={draft.category} onChange={(event) => onDraftChange(day.id, 'category', event.target.value as ItemCategory)}>{Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        </div>
-        <div className="two-column">
-          <label>从哪里<input value={draft.from} onChange={(event) => onDraftChange(day.id, 'from', event.target.value)} placeholder="京都站" /></label>
-          <label>到哪里<input value={draft.to} onChange={(event) => onDraftChange(day.id, 'to', event.target.value)} placeholder="伏见稻荷大社" /></label>
-        </div>
-        <div className="three-column">
-          <label>交通方式<select value={draft.transportMode} onChange={(event) => onDraftChange(day.id, 'transportMode', event.target.value as TransportMode)}>{Object.entries(TRANSPORT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>实际费用<input value={draft.actualCost} onChange={(event) => onDraftChange(day.id, 'actualCost', event.target.value)} placeholder="42" /></label>
-        </div>
-        <label>备注<textarea rows={2} value={draft.notes} onChange={(event) => onDraftChange(day.id, 'notes', event.target.value)} placeholder="预约信息、提醒事项、路线细节等。" /></label>
-        <button className="primary-button" onClick={() => onAddItem(day.id)}>添加到当天行程</button>
-      </div>
-
-      <div className="item-list">
-        {day.items.length === 0 ? (
-          <div className="empty-state compact"><p>还没有添加事项，可以先在上方新增一条行程。</p></div>
-        ) : (
-          day.items.map((item) => (
-            <article key={item.id} className="item-card">
-              <div className="item-top">
-                <div>
-                  <span className="item-kicker">{CATEGORY_LABELS[item.category]} · {TRANSPORT_LABELS[item.transportMode]}</span>
-                  <h4>{item.title}</h4>
-                </div>
-                <span className={`badge ${item.progress === 'done' ? 'done' : ''}`}>{PROGRESS_LABELS[item.progress]}</span>
-              </div>
-              <div className="item-grid">
-                <Field label="标题"><input value={item.title} onChange={(event) => onUpdateItem(day.id, item.id, { title: event.target.value })} /></Field>
-                <Field label="开始时间"><input type="time" value={item.startTime} onChange={(event) => onUpdateItem(day.id, item.id, { startTime: event.target.value })} /></Field>
-                <Field label="结束时间"><input type="time" value={item.endTime} onChange={(event) => onUpdateItem(day.id, item.id, { endTime: event.target.value })} /></Field>
-                <Field label="起点"><input value={item.from} onChange={(event) => onUpdateItem(day.id, item.id, { from: event.target.value })} /></Field>
-                <Field label="终点"><input value={item.to} onChange={(event) => onUpdateItem(day.id, item.id, { to: event.target.value })} /></Field>
-                <Field label="交通方式"><select value={item.transportMode} onChange={(event) => onUpdateItem(day.id, item.id, { transportMode: event.target.value as TransportMode })}>{Object.entries(TRANSPORT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                <Field label="事项类型"><select value={item.category} onChange={(event) => onUpdateItem(day.id, item.id, { category: event.target.value as ItemCategory })}>{Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                <Field label="实际费用"><input value={item.actualCost} onChange={(event) => onUpdateItem(day.id, item.id, { actualCost: event.target.value })} /></Field>
-              </div>
-              <label>备注<textarea rows={2} value={item.notes} onChange={(event) => onUpdateItem(day.id, item.id, { notes: event.target.value })} /></label>
-              <div className="item-actions">
-                <button className="mini-button" onClick={() => onUpdateItem(day.id, item.id, { progress: item.progress === 'done' ? 'todo' : 'done' })}>{item.progress === 'done' ? '标记为待完成' : '标记为已完成'}</button>
-                <button className="mini-button" onClick={() => onMoveItem(day.id, item.id, 'up')}>上移</button>
-                <button className="mini-button" onClick={() => onMoveItem(day.id, item.id, 'down')}>下移</button>
-                <button className="danger-button" onClick={() => onRemoveItem(day.id, item.id)}>删除事项</button>
-              </div>
-            </article>
-          ))
-        )}
-      </div>
-    </div>
-  )
-}
-
-function JournalView({
-  trip,
-  onDuplicate,
-  onDelete,
-}: {
-  trip: Trip
-  onDuplicate: (trip: Trip) => void
-  onDelete: (tripId: string) => void
-}) {
-  const stats = computeTripStats(trip)
-  return (
-    <div className="journal-view">
-      <header className="journal-header">
-        <div>
-          <span className="eyebrow">旅行日记</span>
-          <h2>{trip.title}</h2>
-          <p>{trip.departure} 到 {trip.destination} · {trip.startDate} 到 {trip.endDate}</p>
-          <p>{trip.summary || '这趟旅程还没有补充说明。'}</p>
-        </div>
-        <div className="summary-actions">
-          <p className="summary-caption">归档概览</p>
-          <div className="summary-metrics summary-metrics-archived">
-            <Metric label="总天数" value={trip.days.length} />
-            <Metric label="事项进度" value={`${stats.completedItems}/${stats.totalItems}`} />
-            <Metric label="实际总花费" value={`¥ ${stats.actualTotal || 0}`} />
-          </div>
-          <button className="primary-button" onClick={() => onDuplicate(trip)}>复制成新计划</button>
-        </div>
-      </header>
-      <div className="journal-days">
-        {trip.days.map((day, index) => (
-          <section key={day.id} className="journal-day">
-            <div className="section-title">
-              <h3>{`Day ${index + 1} · ${formatDate(day.date)}`}</h3>
-              <span className="badge">{getCitySummary(day.cities, '未填写城市')}</span>
-            </div>
-            <p className="journal-note">{day.note || '这一天没有补充说明。'}</p>
-            <div className="timeline">
-              {day.items.length === 0 ? <div className="empty-state compact"><p>这一天没有记录事项。</p></div> : day.items.map((item) => (
-                <article key={item.id} className="timeline-card">
-                  <div className="timeline-time"><strong>{item.startTime || '--:--'}</strong><span>{item.endTime || '未结束'}</span></div>
-                  <div className="timeline-content">
-                    <div className="item-top">
-                      <div><span className="item-kicker">{CATEGORY_LABELS[item.category]} · {TRANSPORT_LABELS[item.transportMode]}</span><h4>{item.title}</h4></div>
-                      <span className={`badge ${item.progress === 'done' ? 'done' : ''}`}>{PROGRESS_LABELS[item.progress]}</span>
-                    </div>
-                    <p>{item.from || '未填写起点'} 到 {item.to || '未填写终点'}</p>
-                    <p>实际花费 ¥ {item.actualCost || '0'}</p>
-                    {item.notes ? <p>{item.notes}</p> : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
-      <div className="danger-action-row">
-        <button className="danger-button" onClick={() => onDelete(trip.id)}>
-          删除这趟旅行
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function loadTripsFromCache() {
-  const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw) as Trip[]
-    const normalized = normalizeTrips(parsed)
-    return normalized.filter((trip) => !isBuiltInSampleTrip(trip))
-  } catch {
-    return []
-  }
-}
-
-async function fetchTripsFromCloud() {
-  const response = await fetch(CLOUD_SYNC_ENDPOINT, {
-    headers: { accept: 'application/json' },
-  })
-
-  if (!response.ok) {
-    throw new Error(`Failed to load trips: ${response.status}`)
-  }
-
-  const payload = (await response.json()) as { trips?: Trip[] }
-  return normalizeTrips(Array.isArray(payload.trips) ? payload.trips : []).filter((trip) => !isBuiltInSampleTrip(trip))
-}
-
-async function saveTripsToCloud(trips: Trip[]) {
-  const response = await fetch(CLOUD_SYNC_ENDPOINT, {
-    method: 'PUT',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ trips }),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Failed to save trips: ${response.status}`)
-  }
-}
-
-function serializeTrips(trips: Trip[]) {
-  return JSON.stringify(trips)
-}
-
-function isBuiltInSampleTrip(trip: Trip) {
-  return (
-    trip.title === '上海周末散心' &&
-    trip.departure === '杭州' &&
-    trip.destination === '上海' &&
-    trip.startDate === '2026-04-18' &&
-    trip.endDate === '2026-04-19' &&
-    trip.cover === '城市夜景' &&
-    trip.summary === '两天一夜，轻松吃逛，看夜景，适合周末短途放松。' &&
-    trip.status === 'planning' &&
-    trip.days.length === 2 &&
-    trip.days[0]?.date === '2026-04-18' &&
-    trip.days[0]?.cities.join('|') === '上海' &&
-    trip.days[0]?.note === '上午出发，晚上看外滩夜景。' &&
-    trip.days[0]?.items.length === 1 &&
-    trip.days[0]?.items[0]?.title === '乘高铁前往虹桥' &&
-    trip.days[1]?.date === '2026-04-19' &&
-    trip.days[1]?.cities.join('|') === '上海' &&
-    trip.days[1]?.note === '白天自由活动，晚上返程。' &&
-    trip.days[1]?.items.length === 0
-  )
-}
-
-function buildTripDays(startDate: string, endDate: string, existingDays: TripDay[] = []) {
-  const result: TripDay[] = []
-  const current = parseLocalDate(startDate)
-  const end = parseLocalDate(endDate)
-  while (current <= end) {
-    const date = formatDateKey(current)
-    const existing = existingDays.find((day) => day.date === date)
-    result.push(existing ?? { id: createId(), date, cities: [''], note: '', items: [] })
-    current.setDate(current.getDate() + 1)
-  }
-  return result
-}
-
-function normalizeTrips(trips: Trip[]) {
-  return trips.map((trip) => ({
-    ...trip,
-    days: trip.days.map((day) => ({
-      ...day,
-      cities:
-        'cities' in day && Array.isArray(day.cities) && day.cities.length > 0
-          ? [...day.cities]
-          : [((day as TripDay & { city?: string }).city ?? '')],
-    })),
-  }))
-}
-
-function computeTripStats(trip: Trip | null) {
-  if (!trip) return { totalItems: 0, completedItems: 0, actualTotal: 0 }
-  const items = trip.days.flatMap((day) => day.items)
-  return {
-    totalItems: items.length,
-    completedItems: items.filter((item) => item.progress === 'done').length,
-    actualTotal: items.reduce((sum, item) => sum + toNumber(item.actualCost), 0),
-  }
-}
-
-function toNumber(value: string) {
-  const parsed = Number.parseFloat(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-function createId() {
-  return Math.random().toString(36).slice(2, 10)
-}
-
-function formatDate(value: string) {
-  const date = parseLocalDate(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' }).format(date)
-}
-
-function parseLocalDate(value: string) {
-  const [year, month, day] = value.split('-').map(Number)
-  return new Date(year, (month || 1) - 1, day || 1)
-}
-
-function formatDateKey(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function getCitySummary(cities: string[], fallback = '待填写城市') {
-  const visibleCities = cities.map((city) => city.trim()).filter(Boolean)
-  return visibleCities.length > 0 ? visibleCities.join(' / ') : fallback
+function serializeTripsForSync(trips: Trip[]) {
+  return JSON.stringify(trips.map(stripTripPermissions))
 }
 
 export default App
