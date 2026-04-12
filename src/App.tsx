@@ -729,7 +729,7 @@ function App() {
     <main className="app-shell">
       <div className="app-topbar">
         <button
-          className="ghost-button mobile-workspace-button"
+          className="ghost-button mobile-workspace-button topbar-action-button"
           onClick={() => setIsWorkspacePanelOpen(true)}
           aria-expanded={isWorkspacePanelOpen}
           aria-controls="travel-workspace-panel"
