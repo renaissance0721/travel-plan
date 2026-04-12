@@ -70,7 +70,8 @@
   margin-left: auto;
 }
 
-.mobile-workspace-button {
+.mobile-workspace-button,
+.mobile-workspace-button.topbar-action-button {
   display: none;
 }
 
@@ -799,7 +800,8 @@ button:disabled {
     backdrop-filter: blur(8px);
   }
 
-  .mobile-workspace-button {
+  .mobile-workspace-button,
+  .mobile-workspace-button.topbar-action-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
