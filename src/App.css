@@ -40,9 +40,28 @@
   min-height: 1.5em;
 }
 
+.app-topbar,
+.topbar-actions,
 .mobile-workspace-bar,
 .mobile-sidebar-backdrop,
 .sidebar-sheet-header {
+  display: none;
+}
+
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.mobile-workspace-button {
   display: none;
 }
 
@@ -92,6 +111,10 @@ button {
 
 .hero-text {
   max-width: 60ch;
+}
+
+.hero-copy .hero-actions {
+  display: none;
 }
 
 .account-chip-row,
@@ -746,9 +769,11 @@ button:disabled {
     gap: 16px;
   }
 
-  .mobile-workspace-bar {
+  .app-topbar {
     display: flex;
-    justify-content: flex-start;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
     position: sticky;
     top: 8px;
     z-index: 20;
@@ -758,9 +783,16 @@ button:disabled {
   }
 
   .mobile-workspace-button {
+    display: inline-flex;
     border-radius: 999px;
     padding: 10px 14px;
     box-shadow: 0 10px 24px rgba(18, 31, 48, 0.08);
+  }
+
+  .topbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex: 1 1 260px;
   }
 
   .mobile-sidebar-backdrop {
@@ -895,6 +927,7 @@ button:disabled {
     grid-auto-flow: row;
   }
 
+  .topbar-actions button,
   .hero-actions button,
   .share-form button,
   .sidebar-trip-actions button,
@@ -1013,6 +1046,11 @@ button:disabled {
   .app-shell {
     width: min(100%, calc(100% - 12px));
     padding: 12px 0 24px;
+  }
+
+  .topbar-actions {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .sidebar {

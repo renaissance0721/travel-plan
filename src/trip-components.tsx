@@ -138,12 +138,10 @@ export function SharePanel({
 
 export function SidebarTripEditor({
   tripForm,
-  onCreate,
   onChange,
   onSave,
 }: {
   tripForm: TripForm
-  onCreate: () => void
   onChange: <K extends keyof TripForm>(key: K, value: TripForm[K]) => void
   onSave: () => void
 }) {
@@ -187,7 +185,6 @@ export function SidebarTripEditor({
       </label>
       <div className="sidebar-trip-actions">
         <button className="ghost-button" onClick={onSave}>保存基础信息</button>
-        <button className="primary-button" onClick={onCreate}>新建旅行</button>
       </div>
     </section>
   )

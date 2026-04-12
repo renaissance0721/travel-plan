@@ -727,7 +727,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <div className="mobile-workspace-bar">
+      <div className="app-topbar">
         <button
           className="ghost-button mobile-workspace-button"
           onClick={() => setIsWorkspacePanelOpen(true)}
@@ -736,6 +736,15 @@ function App() {
         >
           旅行工作台
         </button>
+        <div className="topbar-actions">
+          <button
+            className="primary-button"
+            onClick={() => (activeView === 'planner' ? startCreatingTrip() : changeView('planner'))}
+          >
+            {activeView === 'planner' ? '新建旅行' : '前往计划中'}
+          </button>
+          <button className="ghost-button" onClick={handleLogout}>退出登录</button>
+        </div>
       </div>
       <button
         type="button"
@@ -821,7 +830,6 @@ function App() {
             selectedTrip ? (
               <SidebarTripEditor
                 tripForm={tripForm}
-                onCreate={startCreatingTrip}
                 onChange={handleTripFormChange}
                 onSave={saveTrip}
               />
