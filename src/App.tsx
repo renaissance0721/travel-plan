@@ -66,6 +66,7 @@ function App() {
   const [isLoadingTrips, setIsLoadingTrips] = useState(false)
   const [shareEmail, setShareEmail] = useState('')
   const [shareState, setShareState] = useState<SyncState>('idle')
+  const [isWorkspacePanelOpen, setIsWorkspacePanelOpen] = useState(false)
   const [shareMessage, setShareMessage] = useState('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
   const lastSyncedPayloadRef = useRef<string | null>(null)
   const hasHydratedRef = useRef(false)
@@ -300,6 +301,7 @@ function App() {
     setIsCreatingTrip(false)
     setShareEmail('')
     setShareState('idle')
+    setIsWorkspacePanelOpen(false)
     setShareMessage('把这趟旅行分享给别人的账号邮箱后，对方也能一起编辑。')
     setIsLoadingTrips(false)
     hasHydratedRef.current = false
@@ -402,6 +404,7 @@ function App() {
     setSelectedTripId(trip.id)
     setEditingDayId(trip.days[0]?.id ?? null)
     setIsCreatingTrip(false)
+    setIsWorkspacePanelOpen(false)
     if (activeView === 'planner') {
       setTripFormFromTrip(trip)
     }
@@ -412,10 +415,12 @@ function App() {
     setTripForm(emptyTripForm())
     setEditingTripId(null)
     setIsCreatingTrip(true)
+    setIsWorkspacePanelOpen(false)
   }
 
   function changeView(view: 'planner' | 'journal') {
     setActiveView(view)
+    setIsWorkspacePanelOpen(false)
     if (view === 'journal') {
       resetTripEditor()
     }
@@ -723,6 +728,22 @@ function App() {
 
   return (
     <main className="app-shell">
+      <div className="mobile-workspace-bar">
+        <button
+          className="ghost-button mobile-workspace-button"
+          onClick={() => setIsWorkspacePanelOpen(true)}
+          aria-expanded={isWorkspacePanelOpen}
+          aria-controls="travel-workspace-panel"
+        >
+          旅行工作台
+        </button>
+      </div>
+      <button
+        type="button"
+        className={`mobile-sidebar-backdrop ${isWorkspacePanelOpen ? 'mobile-sidebar-backdrop-open' : ''}`}
+        onClick={() => setIsWorkspacePanelOpen(false)}
+        aria-label="关闭旅行工作台"
+      />
       <section className="hero-panel">
         <div className="hero-copy">
           <span className="eyebrow">登录同步与共享旅行</span>
@@ -755,7 +776,16 @@ function App() {
       </section>
 
       <section className="workspace-grid">
-        <aside className="panel sidebar">
+        <aside
+          id="travel-workspace-panel"
+          className={`panel sidebar ${isWorkspacePanelOpen ? 'sidebar-open' : ''}`}
+        >
+          <div className="sidebar-sheet-header">
+            <span className="eyebrow">旅行工作台</span>
+            <button className="mini-button sidebar-close-button" onClick={() => setIsWorkspacePanelOpen(false)}>
+              关闭
+            </button>
+          </div>
           <div className="panel-header">
             <div>
               <h2>旅行工作台</h2>
