@@ -1,5 +1,6 @@
 import { getAuthenticatedUser } from '../_lib/auth'
 import { errorResponse, jsonResponse, parseJsonBody, type AppContext } from '../_lib/http'
+import { ensureAppSchema, getDatabaseErrorMessage } from '../_lib/schema'
 import { getAccessibleTrips, syncTripsForUser } from '../_lib/trips'
 
 type TripsRequestBody = {
@@ -7,30 +8,38 @@ type TripsRequestBody = {
 }
 
 export async function onRequestGet(context: AppContext) {
-  const user = await getAuthenticatedUser(context.request, context.env)
-  if (!user) {
-    return errorResponse('请先登录后再查看旅行数据。', 401)
-  }
+  try {
+    await ensureAppSchema(context.env)
 
-  const trips = await getAccessibleTrips(context.env, user)
-  return jsonResponse({ trips })
+    const user = await getAuthenticatedUser(context.request, context.env)
+    if (!user) {
+      return errorResponse('Please sign in before loading trips.', 401)
+    }
+
+    const trips = await getAccessibleTrips(context.env, user)
+    return jsonResponse({ trips })
+  } catch (error) {
+    return errorResponse(getDatabaseErrorMessage(error, 'Unable to load trips right now.'), 500)
+  }
 }
 
 export async function onRequestPost(context: AppContext) {
-  const user = await getAuthenticatedUser(context.request, context.env)
-  if (!user) {
-    return errorResponse('请先登录后再保存旅行数据。', 401)
-  }
-
-  const body = await parseJsonBody<TripsRequestBody>(context.request)
-  if (!body || !Array.isArray(body.trips)) {
-    return errorResponse('请求体里需要包含 trips 数组。')
-  }
-
   try {
+    await ensureAppSchema(context.env)
+
+    const user = await getAuthenticatedUser(context.request, context.env)
+    if (!user) {
+      return errorResponse('Please sign in before saving trips.', 401)
+    }
+
+    const body = await parseJsonBody<TripsRequestBody>(context.request)
+    if (!body || !Array.isArray(body.trips)) {
+      return errorResponse('The request body must include a trips array.')
+    }
+
     const trips = await syncTripsForUser(context.env, user, body.trips as never[])
     return jsonResponse({ trips })
   } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : '保存旅行数据失败。', 400)
+    return errorResponse(getDatabaseErrorMessage(error, 'Unable to save trips right now.'), 400)
   }
 }
