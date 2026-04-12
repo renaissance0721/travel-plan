@@ -70,6 +70,15 @@ function App() {
   const lastSyncedPayloadRef = useRef<string | null>(null)
   const hasHydratedRef = useRef(false)
   const saveTimerRef = useRef<number | null>(null)
+  const selectionStateRef = useRef<{
+    selectedTripId: string
+    editingDayId: string | null
+    activeView: 'planner' | 'journal'
+  }>({
+    selectedTripId: '',
+    editingDayId: null,
+    activeView: 'planner',
+  })
 
   const planningTrips = useMemo(() => trips.filter((trip) => trip.status === 'planning'), [trips])
   const archivedTrips = useMemo(() => trips.filter((trip) => trip.status === 'archived'), [trips])
@@ -131,6 +140,14 @@ function App() {
   }, [currentUser, trips])
 
   useEffect(() => {
+    selectionStateRef.current = {
+      selectedTripId,
+      editingDayId,
+      activeView,
+    }
+  }, [activeView, editingDayId, selectedTripId])
+
+  useEffect(() => {
     if (authStatus !== 'authenticated' || !currentUser || !hasHydratedRef.current) return
 
     const payload = serializeTripsForSync(trips)
@@ -143,11 +160,10 @@ function App() {
       window.clearTimeout(saveTimerRef.current)
     }
 
-    const preferredTripId = selectedTripId
-    const preferredView = activeView
+    const tripsToPersist = trips
 
     saveTimerRef.current = window.setTimeout(() => {
-      void persistTrips(preferredTripId, preferredView)
+      void persistTrips(tripsToPersist)
     }, CLOUD_SAVE_DELAY_MS)
 
     return () => {
@@ -156,7 +172,7 @@ function App() {
         saveTimerRef.current = null
       }
     }
-  }, [activeView, authStatus, currentUser, selectedTripId, trips])
+  }, [authStatus, currentUser, trips])
 
   useEffect(() => {
     if (!selectedTrip) {
@@ -233,7 +249,12 @@ function App() {
     }
   }
 
-  function applyTripsSnapshot(nextTrips: Trip[], preferredTripId = selectedTripId, preferredView = activeView) {
+  function applyTripsSnapshot(
+    nextTrips: Trip[],
+    preferredTripId = selectionStateRef.current.selectedTripId,
+    preferredView = selectionStateRef.current.activeView,
+    preferredDayId = selectionStateRef.current.editingDayId,
+  ) {
     const normalizedTrips = normalizeTrips(nextTrips)
     const nextPlanningTrips = normalizedTrips.filter((trip) => trip.status === 'planning')
     const nextArchivedTrips = normalizedTrips.filter((trip) => trip.status === 'archived')
@@ -249,11 +270,13 @@ function App() {
       nextPlanningTrips[0] ??
       nextArchivedTrips[0] ??
       null
+    const nextSelectedDay =
+      nextSelectedTrip?.days.find((day) => day.id === preferredDayId) ?? nextSelectedTrip?.days[0] ?? null
 
     setTrips(normalizedTrips)
     setActiveView(nextView)
     setSelectedTripId(nextSelectedTrip?.id ?? '')
-    setEditingDayId(nextSelectedTrip?.days[0]?.id ?? null)
+    setEditingDayId(nextSelectedDay?.id ?? null)
     setItemDrafts({})
     setIsCreatingTrip(false)
 
@@ -283,13 +306,18 @@ function App() {
     lastSyncedPayloadRef.current = null
   }
 
-  async function persistTrips(preferredTripId = selectedTripId, preferredView = activeView) {
+  async function persistTrips(tripsToPersist: Trip[]) {
     if (!currentUser) return
 
     try {
-      const response = await syncTrips(trips.map(stripTripPermissions))
+      const response = await syncTrips(tripsToPersist.map(stripTripPermissions))
       const normalized = normalizeTrips(response.trips)
-      applyTripsSnapshot(normalized, preferredTripId, preferredView)
+      const {
+        selectedTripId: preferredTripId,
+        editingDayId: preferredDayId,
+        activeView: preferredView,
+      } = selectionStateRef.current
+      applyTripsSnapshot(normalized, preferredTripId, preferredView, preferredDayId)
       saveTripsToCache(currentUser.email, normalized)
       lastSyncedPayloadRef.current = serializeTripsForSync(normalized)
       setSyncState('saved')
