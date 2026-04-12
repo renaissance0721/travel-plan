@@ -51,27 +51,35 @@
 .app-topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .topbar-actions {
-  display: grid;
-  grid-template-columns: repeat(2, max-content);
+  display: flex;
+  flex: 1;
   gap: 12px;
   align-items: center;
-  width: 100%;
+  min-width: 0;
 }
 
 .topbar-actions > :first-child {
-  justify-self: start;
+  margin-right: auto;
 }
 
 .topbar-actions > :last-child {
-  justify-self: end;
+  margin-left: auto;
 }
 
 .mobile-workspace-button {
   display: none;
+}
+
+.topbar-action-button,
+.topbar-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
 }
 
 .hero-panel,
@@ -780,7 +788,7 @@ button:disabled {
 
   .app-topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: stretch;
     gap: 10px;
     position: sticky;
@@ -803,22 +811,16 @@ button:disabled {
   }
 
   .topbar-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
-    gap: 10px;
+    display: contents;
   }
 
-  .topbar-actions > :first-child,
-  .topbar-actions > :last-child {
-    justify-self: stretch;
-  }
-
-  .topbar-actions button {
+  .topbar-action-button,
+  .topbar-actions > button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 100%;
+    min-width: 0;
     min-height: 44px;
     padding: 10px 12px;
     border-radius: 999px;
@@ -957,7 +959,8 @@ button:disabled {
     grid-auto-flow: row;
   }
 
-  .topbar-actions button,
+  .topbar-action-button,
+  .topbar-actions > button,
   .hero-actions button,
   .share-form button,
   .sidebar-trip-actions button,
@@ -1078,9 +1081,14 @@ button:disabled {
     padding: 12px 0 24px;
   }
 
-  .topbar-actions {
-    grid-template-columns: 1fr;
-    width: 100%;
+  .app-topbar {
+    gap: 8px;
+  }
+
+  .topbar-action-button,
+  .topbar-actions > button {
+    padding: 10px 8px;
+    font-size: 0.92rem;
   }
 
   .sidebar {
