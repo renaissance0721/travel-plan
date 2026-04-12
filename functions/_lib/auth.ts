@@ -2,7 +2,8 @@ import { createServerId, type Env } from './http'
 
 const SESSION_COOKIE_NAME = 'travel_session'
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30
-const PASSWORD_ITERATIONS = 310000
+const PASSWORD_ITERATIONS = 100000
+const MAX_PASSWORD_ITERATIONS = 100000
 
 type SessionUserRow = {
   id: string
@@ -38,12 +39,16 @@ export async function verifyPassword(password: string, storedHash: string) {
   if (algorithm !== 'pbkdf2' || !iterationsText || !saltText || !hashText) return false
 
   const iterations = Number.parseInt(iterationsText, 10)
-  if (!Number.isFinite(iterations)) return false
+  if (!Number.isFinite(iterations) || iterations < 1 || iterations > MAX_PASSWORD_ITERATIONS) return false
 
   const salt = base64UrlToBytes(saltText)
   const expected = base64UrlToBytes(hashText)
-  const derived = await derivePasswordHash(password, salt, iterations)
-  return timingSafeEqual(derived, expected)
+  try {
+    const derived = await derivePasswordHash(password, salt, iterations)
+    return timingSafeEqual(derived, expected)
+  } catch {
+    return false
+  }
 }
 
 export async function createSession(env: Env, userId: string) {
