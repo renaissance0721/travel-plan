@@ -515,6 +515,56 @@ label {
   gap: 8px;
 }
 
+.collapsible-item {
+  display: block;
+}
+
+.collapsible-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible-summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-summary::marker {
+  content: '';
+}
+
+.item-summary-title {
+  color: #17212f;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.collapsible-item[open] .collapsible-summary {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(25, 35, 52, 0.08);
+}
+
+.item-card-body,
+.timeline-card-body,
+.item-detail-badges {
+  display: grid;
+  gap: 12px;
+}
+
+.item-detail-badges {
+  grid-auto-flow: column;
+  justify-content: start;
+}
+
+.timeline-card-body {
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: start;
+}
+
 .section-title {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -817,6 +867,11 @@ button:disabled {
     gap: 12px;
   }
 
+  .timeline-card-body {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
   .timeline-time {
     grid-auto-flow: column;
     justify-content: space-between;
@@ -876,6 +931,15 @@ button:disabled {
 
   .item-actions {
     grid-template-columns: 1fr;
+  }
+
+  .collapsible-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .item-detail-badges {
+    grid-auto-flow: row;
   }
 
   .sync-status,

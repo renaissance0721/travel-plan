@@ -7,8 +7,8 @@ import {
   formatDate,
   getCitySummary,
   type AuthMode,
-  type ItemDraft,
   type ItemCategory,
+  type ItemDraft,
   type SyncState,
   type TransportMode,
   type Trip,
@@ -43,9 +43,7 @@ export function AuthScreen({
       <section className="auth-card">
         <span className="eyebrow">账号同步与共享旅行</span>
         <h1>你的旅行手账</h1>
-        <p className="auth-copy">
-          注册后，你的旅行计划会绑定到账号。你也可以把单独一趟旅行分享给别人的账号邮箱，一起编辑同一份计划。
-        </p>
+        <p className="auth-copy">注册后，旅行计划会绑定到你的账号，也可以把单独的旅行分享给别的账号一起编辑。</p>
         <div className="view-toggle auth-toggle">
           <button className={mode === 'login' ? 'toggle-active' : ''} onClick={() => onModeChange('login')}>
             登录
@@ -54,8 +52,19 @@ export function AuthScreen({
             注册
           </button>
         </div>
-        <label>账号邮箱<input value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@example.com" /></label>
-        <label>密码<input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} placeholder="至少 8 位" /></label>
+        <label>
+          账号邮箱
+          <input value={email} onChange={(event) => onEmailChange(event.target.value)} placeholder="you@example.com" />
+        </label>
+        <label>
+          密码
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => onPasswordChange(event.target.value)}
+            placeholder="至少 8 位"
+          />
+        </label>
         <button className="primary-button" onClick={onSubmit} disabled={isBusy}>
           {isBusy ? '提交中...' : mode === 'login' ? '登录并进入旅行手账' : '注册并进入旅行手账'}
         </button>
@@ -101,7 +110,7 @@ export function SharePanel({
       </div>
       {trip.accessRole === 'owner' ? (
         <>
-          <p>把这趟旅行分享给对方的账号邮箱后，对方登录就能看到并一起编辑。</p>
+          <p>把这趟旅行分享给对方的账号邮箱后，对方登录自己的账号就能看到并一起编辑。</p>
           <div className="share-form">
             <input value={shareEmail} onChange={(event) => onShareEmailChange(event.target.value)} placeholder="friend@example.com" />
             <button className="primary-button" onClick={onShare}>分享给这个账号</button>
@@ -109,7 +118,9 @@ export function SharePanel({
           <p className={`share-feedback share-feedback-${shareState}`}>{shareMessage}</p>
           {trip.sharedWith && trip.sharedWith.length > 0 ? (
             <div className="share-list">
-              {trip.sharedWith.map((email) => <span key={email} className="badge">{email}</span>)}
+              {trip.sharedWith.map((email) => (
+                <span key={email} className="badge">{email}</span>
+              ))}
             </div>
           ) : (
             <p className="share-empty">这趟旅行目前还没有分享给其他账号。</p>
@@ -142,17 +153,38 @@ export function SidebarTripEditor({
         <h3>旅行基础信息</h3>
         <span className="badge">{tripForm.cover || '未填写主题'}</span>
       </div>
-      <label>旅行名称<input value={tripForm.title} onChange={(event) => onChange('title', event.target.value)} placeholder="例如：京都红叶五日" /></label>
+      <label>
+        旅行名称
+        <input value={tripForm.title} onChange={(event) => onChange('title', event.target.value)} placeholder="例如：京都红叶五日" />
+      </label>
       <div className="two-column">
-        <label>出发地<input value={tripForm.departure} onChange={(event) => onChange('departure', event.target.value)} placeholder="上海" /></label>
-        <label>目的地<input value={tripForm.destination} onChange={(event) => onChange('destination', event.target.value)} placeholder="东京" /></label>
+        <label>
+          出发地
+          <input value={tripForm.departure} onChange={(event) => onChange('departure', event.target.value)} placeholder="上海" />
+        </label>
+        <label>
+          目的地
+          <input value={tripForm.destination} onChange={(event) => onChange('destination', event.target.value)} placeholder="东京" />
+        </label>
       </div>
       <div className="two-column">
-        <label>开始日期<input type="date" value={tripForm.startDate} onChange={(event) => onChange('startDate', event.target.value)} /></label>
-        <label>结束日期<input type="date" value={tripForm.endDate} onChange={(event) => onChange('endDate', event.target.value)} /></label>
+        <label>
+          开始日期
+          <input type="date" value={tripForm.startDate} onChange={(event) => onChange('startDate', event.target.value)} />
+        </label>
+        <label>
+          结束日期
+          <input type="date" value={tripForm.endDate} onChange={(event) => onChange('endDate', event.target.value)} />
+        </label>
       </div>
-      <label>封面主题<input value={tripForm.cover} onChange={(event) => onChange('cover', event.target.value)} placeholder="海岸、雪山、古城" /></label>
-      <label>旅行说明<textarea rows={3} value={tripForm.summary} onChange={(event) => onChange('summary', event.target.value)} placeholder="这趟旅行主要想玩什么？" /></label>
+      <label>
+        封面主题
+        <input value={tripForm.cover} onChange={(event) => onChange('cover', event.target.value)} placeholder="海岸、雪山、古城" />
+      </label>
+      <label>
+        旅行说明
+        <textarea rows={3} value={tripForm.summary} onChange={(event) => onChange('summary', event.target.value)} placeholder="这趟旅行主要想玩什么？" />
+      </label>
       <div className="sidebar-trip-actions">
         <button className="ghost-button" onClick={onSave}>保存基础信息</button>
         <button className="primary-button" onClick={onCreate}>新建旅行</button>
@@ -182,24 +214,50 @@ export function TripBasicsForm({
         <h3>{title}</h3>
         <button className="mini-button" onClick={onCancel}>取消</button>
       </div>
-      <label>旅行名称<input value={tripForm.title} onChange={(event) => onChange('title', event.target.value)} placeholder="例如：京都红叶五日" /></label>
+      <label>
+        旅行名称
+        <input value={tripForm.title} onChange={(event) => onChange('title', event.target.value)} placeholder="例如：京都红叶五日" />
+      </label>
       <div className="two-column">
-        <label>出发地<input value={tripForm.departure} onChange={(event) => onChange('departure', event.target.value)} placeholder="上海" /></label>
-        <label>目的地<input value={tripForm.destination} onChange={(event) => onChange('destination', event.target.value)} placeholder="东京" /></label>
+        <label>
+          出发地
+          <input value={tripForm.departure} onChange={(event) => onChange('departure', event.target.value)} placeholder="上海" />
+        </label>
+        <label>
+          目的地
+          <input value={tripForm.destination} onChange={(event) => onChange('destination', event.target.value)} placeholder="东京" />
+        </label>
       </div>
       <div className="two-column">
-        <label>开始日期<input type="date" value={tripForm.startDate} onChange={(event) => onChange('startDate', event.target.value)} /></label>
-        <label>结束日期<input type="date" value={tripForm.endDate} onChange={(event) => onChange('endDate', event.target.value)} /></label>
+        <label>
+          开始日期
+          <input type="date" value={tripForm.startDate} onChange={(event) => onChange('startDate', event.target.value)} />
+        </label>
+        <label>
+          结束日期
+          <input type="date" value={tripForm.endDate} onChange={(event) => onChange('endDate', event.target.value)} />
+        </label>
       </div>
-      <label>封面主题<input value={tripForm.cover} onChange={(event) => onChange('cover', event.target.value)} placeholder="海岸、雪山、古城" /></label>
-      <label>旅行说明<textarea rows={3} value={tripForm.summary} onChange={(event) => onChange('summary', event.target.value)} placeholder="这趟旅行主要想玩什么？" /></label>
+      <label>
+        封面主题
+        <input value={tripForm.cover} onChange={(event) => onChange('cover', event.target.value)} placeholder="海岸、雪山、古城" />
+      </label>
+      <label>
+        旅行说明
+        <textarea rows={3} value={tripForm.summary} onChange={(event) => onChange('summary', event.target.value)} placeholder="这趟旅行主要想玩什么？" />
+      </label>
       <button className="primary-button" onClick={onSubmit}>{actionLabel}</button>
     </section>
   )
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label>{label}{children}</label>
+  return (
+    <label>
+      {label}
+      {children}
+    </label>
+  )
 }
 
 export function DayEditor({
@@ -269,29 +327,67 @@ export function DayEditor({
             </button>
           </div>
         </div>
-        <label>当天备注<textarea rows={2} value={day.note} onChange={(event) => onDayChange(day.id, { note: event.target.value })} placeholder="写下今天的重点安排。" /></label>
+        <label>
+          当天备注
+          <textarea rows={2} value={day.note} onChange={(event) => onDayChange(day.id, { note: event.target.value })} placeholder="写下今天的重点安排。" />
+        </label>
       </div>
 
       <div className="editor-card">
         <div className="section-title">
           <h3>新增事项</h3>
-          <p>每一件事都可以单独修改、排序和删除。</p>
+          <p>每个事项都可以单独修改、排序和删除。</p>
         </div>
-        <label>事项标题<input value={draft.title} onChange={(event) => onDraftChange(day.id, 'title', event.target.value)} placeholder="例如：从酒店前往清水寺" /></label>
+        <label>
+          事项标题
+          <input value={draft.title} onChange={(event) => onDraftChange(day.id, 'title', event.target.value)} placeholder="例如：从酒店前往清水寺" />
+        </label>
         <div className="three-column">
-          <label>开始时间<input type="time" value={draft.startTime} onChange={(event) => onDraftChange(day.id, 'startTime', event.target.value)} /></label>
-          <label>结束时间<input type="time" value={draft.endTime} onChange={(event) => onDraftChange(day.id, 'endTime', event.target.value)} /></label>
-          <label>事项类型<select value={draft.category} onChange={(event) => onDraftChange(day.id, 'category', event.target.value as ItemCategory)}>{Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>
+            开始时间
+            <input type="time" value={draft.startTime} onChange={(event) => onDraftChange(day.id, 'startTime', event.target.value)} />
+          </label>
+          <label>
+            结束时间
+            <input type="time" value={draft.endTime} onChange={(event) => onDraftChange(day.id, 'endTime', event.target.value)} />
+          </label>
+          <label>
+            事项类型
+            <select value={draft.category} onChange={(event) => onDraftChange(day.id, 'category', event.target.value as ItemCategory)}>
+              {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="two-column">
-          <label>从哪里<input value={draft.from} onChange={(event) => onDraftChange(day.id, 'from', event.target.value)} placeholder="京都站" /></label>
-          <label>到哪里<input value={draft.to} onChange={(event) => onDraftChange(day.id, 'to', event.target.value)} placeholder="伏见稻荷大社" /></label>
+          <label>
+            从哪里
+            <input value={draft.from} onChange={(event) => onDraftChange(day.id, 'from', event.target.value)} placeholder="京都站" />
+          </label>
+          <label>
+            到哪里
+            <input value={draft.to} onChange={(event) => onDraftChange(day.id, 'to', event.target.value)} placeholder="伏见稻荷大社" />
+          </label>
         </div>
         <div className="three-column">
-          <label>交通方式<select value={draft.transportMode} onChange={(event) => onDraftChange(day.id, 'transportMode', event.target.value as TransportMode)}>{Object.entries(TRANSPORT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>实际费用<input value={draft.actualCost} onChange={(event) => onDraftChange(day.id, 'actualCost', event.target.value)} placeholder="42" /></label>
+          <label>
+            交通方式
+            <select value={draft.transportMode} onChange={(event) => onDraftChange(day.id, 'transportMode', event.target.value as TransportMode)}>
+              {Object.entries(TRANSPORT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            实际费用
+            <input value={draft.actualCost} onChange={(event) => onDraftChange(day.id, 'actualCost', event.target.value)} placeholder="42" />
+          </label>
         </div>
-        <label>备注<textarea rows={2} value={draft.notes} onChange={(event) => onDraftChange(day.id, 'notes', event.target.value)} placeholder="预约信息、提醒事项、路线细节等。" /></label>
+        <label>
+          备注
+          <textarea rows={2} value={draft.notes} onChange={(event) => onDraftChange(day.id, 'notes', event.target.value)} placeholder="预约信息、提醒事项、路线细节等。" />
+        </label>
         <button className="primary-button" onClick={() => onAddItem(day.id)}>添加到当天行程</button>
       </div>
 
@@ -300,32 +396,52 @@ export function DayEditor({
           <div className="empty-state compact"><p>还没有添加事项，可以先在上方新增一条行程。</p></div>
         ) : (
           day.items.map((item) => (
-            <article key={item.id} className="item-card">
-              <div className="item-top">
-                <div>
-                  <span className="item-kicker">{CATEGORY_LABELS[item.category]} · {TRANSPORT_LABELS[item.transportMode]}</span>
-                  <h4>{item.title}</h4>
+            <details key={item.id} className="item-card collapsible-item">
+              <summary className="collapsible-summary">
+                <span className="badge">{CATEGORY_LABELS[item.category]}</span>
+                <strong className="item-summary-title">{item.title || '未填写标题'}</strong>
+              </summary>
+              <div className="item-card-body">
+                <div className="item-detail-badges">
+                  <span className="badge">{TRANSPORT_LABELS[item.transportMode]}</span>
+                  <span className={`badge ${item.progress === 'done' ? 'done' : ''}`}>{PROGRESS_LABELS[item.progress]}</span>
                 </div>
-                <span className={`badge ${item.progress === 'done' ? 'done' : ''}`}>{PROGRESS_LABELS[item.progress]}</span>
+                <div className="item-grid">
+                  <Field label="标题"><input value={item.title} onChange={(event) => onUpdateItem(day.id, item.id, { title: event.target.value })} /></Field>
+                  <Field label="开始时间"><input type="time" value={item.startTime} onChange={(event) => onUpdateItem(day.id, item.id, { startTime: event.target.value })} /></Field>
+                  <Field label="结束时间"><input type="time" value={item.endTime} onChange={(event) => onUpdateItem(day.id, item.id, { endTime: event.target.value })} /></Field>
+                  <Field label="起点"><input value={item.from} onChange={(event) => onUpdateItem(day.id, item.id, { from: event.target.value })} /></Field>
+                  <Field label="终点"><input value={item.to} onChange={(event) => onUpdateItem(day.id, item.id, { to: event.target.value })} /></Field>
+                  <Field label="交通方式">
+                    <select value={item.transportMode} onChange={(event) => onUpdateItem(day.id, item.id, { transportMode: event.target.value as TransportMode })}>
+                      {Object.entries(TRANSPORT_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="事项类型">
+                    <select value={item.category} onChange={(event) => onUpdateItem(day.id, item.id, { category: event.target.value as ItemCategory })}>
+                      {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="实际费用"><input value={item.actualCost} onChange={(event) => onUpdateItem(day.id, item.id, { actualCost: event.target.value })} /></Field>
+                </div>
+                <label>
+                  备注
+                  <textarea rows={2} value={item.notes} onChange={(event) => onUpdateItem(day.id, item.id, { notes: event.target.value })} />
+                </label>
+                <div className="item-actions">
+                  <button className="mini-button" onClick={() => onUpdateItem(day.id, item.id, { progress: item.progress === 'done' ? 'todo' : 'done' })}>
+                    {item.progress === 'done' ? '标记为待完成' : '标记为已完成'}
+                  </button>
+                  <button className="mini-button" onClick={() => onMoveItem(day.id, item.id, 'up')}>上移</button>
+                  <button className="mini-button" onClick={() => onMoveItem(day.id, item.id, 'down')}>下移</button>
+                  <button className="danger-button" onClick={() => onRemoveItem(day.id, item.id)}>删除事项</button>
+                </div>
               </div>
-              <div className="item-grid">
-                <Field label="标题"><input value={item.title} onChange={(event) => onUpdateItem(day.id, item.id, { title: event.target.value })} /></Field>
-                <Field label="开始时间"><input type="time" value={item.startTime} onChange={(event) => onUpdateItem(day.id, item.id, { startTime: event.target.value })} /></Field>
-                <Field label="结束时间"><input type="time" value={item.endTime} onChange={(event) => onUpdateItem(day.id, item.id, { endTime: event.target.value })} /></Field>
-                <Field label="起点"><input value={item.from} onChange={(event) => onUpdateItem(day.id, item.id, { from: event.target.value })} /></Field>
-                <Field label="终点"><input value={item.to} onChange={(event) => onUpdateItem(day.id, item.id, { to: event.target.value })} /></Field>
-                <Field label="交通方式"><select value={item.transportMode} onChange={(event) => onUpdateItem(day.id, item.id, { transportMode: event.target.value as TransportMode })}>{Object.entries(TRANSPORT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                <Field label="事项类型"><select value={item.category} onChange={(event) => onUpdateItem(day.id, item.id, { category: event.target.value as ItemCategory })}>{Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                <Field label="实际费用"><input value={item.actualCost} onChange={(event) => onUpdateItem(day.id, item.id, { actualCost: event.target.value })} /></Field>
-              </div>
-              <label>备注<textarea rows={2} value={item.notes} onChange={(event) => onUpdateItem(day.id, item.id, { notes: event.target.value })} /></label>
-              <div className="item-actions">
-                <button className="mini-button" onClick={() => onUpdateItem(day.id, item.id, { progress: item.progress === 'done' ? 'todo' : 'done' })}>{item.progress === 'done' ? '标记为待完成' : '标记为已完成'}</button>
-                <button className="mini-button" onClick={() => onMoveItem(day.id, item.id, 'up')}>上移</button>
-                <button className="mini-button" onClick={() => onMoveItem(day.id, item.id, 'down')}>下移</button>
-                <button className="danger-button" onClick={() => onRemoveItem(day.id, item.id)}>删除事项</button>
-              </div>
-            </article>
+            </details>
           ))
         )}
       </div>
@@ -343,6 +459,7 @@ export function JournalView({
   onDelete: (tripId: string) => void
 }) {
   const stats = computeTripStats(trip)
+
   return (
     <div className="journal-view">
       <header className="journal-header">
@@ -357,7 +474,7 @@ export function JournalView({
           <div className="summary-metrics summary-metrics-archived">
             <Metric label="总天数" value={trip.days.length} />
             <Metric label="事项进度" value={`${stats.completedItems}/${stats.totalItems}`} />
-            <Metric label="实际总花费" value={`¥ ${stats.actualTotal || 0}`} />
+            <Metric label="实际总花费" value={`楼 ${stats.actualTotal || 0}`} />
           </div>
           <button className="primary-button" onClick={() => onDuplicate(trip)}>复制成新计划</button>
         </div>
@@ -371,20 +488,33 @@ export function JournalView({
             </div>
             <p className="journal-note">{day.note || '这一天没有补充说明。'}</p>
             <div className="timeline">
-              {day.items.length === 0 ? <div className="empty-state compact"><p>这一天没有记录事项。</p></div> : day.items.map((item) => (
-                <article key={item.id} className="timeline-card">
-                  <div className="timeline-time"><strong>{item.startTime || '--:--'}</strong><span>{item.endTime || '未结束'}</span></div>
-                  <div className="timeline-content">
-                    <div className="item-top">
-                      <div><span className="item-kicker">{CATEGORY_LABELS[item.category]} · {TRANSPORT_LABELS[item.transportMode]}</span><h4>{item.title}</h4></div>
-                      <span className={`badge ${item.progress === 'done' ? 'done' : ''}`}>{PROGRESS_LABELS[item.progress]}</span>
+              {day.items.length === 0 ? (
+                <div className="empty-state compact"><p>这一天没有记录事项。</p></div>
+              ) : (
+                day.items.map((item) => (
+                  <details key={item.id} className="timeline-card collapsible-item">
+                    <summary className="collapsible-summary">
+                      <span className="badge">{CATEGORY_LABELS[item.category]}</span>
+                      <strong className="item-summary-title">{item.title || '未填写标题'}</strong>
+                    </summary>
+                    <div className="timeline-card-body">
+                      <div className="timeline-time">
+                        <strong>{item.startTime || '--:--'}</strong>
+                        <span>{item.endTime || '未结束'}</span>
+                      </div>
+                      <div className="timeline-content">
+                        <div className="item-detail-badges">
+                          <span className="badge">{TRANSPORT_LABELS[item.transportMode]}</span>
+                          <span className={`badge ${item.progress === 'done' ? 'done' : ''}`}>{PROGRESS_LABELS[item.progress]}</span>
+                        </div>
+                        <p>{item.from || '未填写起点'} 到 {item.to || '未填写终点'}</p>
+                        <p>实际花费 楼 {item.actualCost || '0'}</p>
+                        {item.notes ? <p>{item.notes}</p> : null}
+                      </div>
                     </div>
-                    <p>{item.from || '未填写起点'} 到 {item.to || '未填写终点'}</p>
-                    <p>实际花费 ¥ {item.actualCost || '0'}</p>
-                    {item.notes ? <p>{item.notes}</p> : null}
-                  </div>
-                </article>
-              ))}
+                  </details>
+                ))
+              )}
             </div>
           </section>
         ))}
