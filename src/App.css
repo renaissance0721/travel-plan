@@ -379,7 +379,7 @@ label {
   display: grid;
   gap: 6px;
   align-content: start;
-  min-height: 92px;
+  min-height: 108px;
 }
 
 .day-nav button strong {
@@ -431,8 +431,8 @@ label {
   display: grid;
   gap: 10px;
   align-content: start;
-  grid-auto-rows: minmax(92px, auto);
-  max-height: calc(6 * 92px + 5 * 10px);
+  grid-auto-rows: minmax(108px, auto);
+  max-height: calc(6 * 108px + 5 * 10px);
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 6px;
